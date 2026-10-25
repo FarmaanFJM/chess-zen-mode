@@ -75,7 +75,7 @@ All screenshots were captured by [`scripts/screenshots.js`](scripts/screenshots.
 
 | Mode | Pages | Notes |
 | --- | --- | --- |
-| **Online Chess** | `/play/online…`, `/game/live/<id>` | Live games against other players |
+| **Online Chess** | `/play/online…`, `/game/<id>`, `/game/live/<id>` | Live games against other players |
 | **Daily Chess** | `/game/daily/<id>` | Same layout as Online |
 | **Puzzles** | `/puzzles`, `/puzzles/rated`, `/puzzles/rush`, `/puzzles/battle`, `/puzzles/problem/…`, `/puzzles/daily`, `/puzzles/learning`, `/puzzles/custom` | Optional compact stats panel (read from Chess.com's own sidebar) |
 | **Analysis Board** | `/analysis…` | Chess.com's analysis panel, engine toggle and lines stay visible by default |

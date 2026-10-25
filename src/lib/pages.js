@@ -2,8 +2,9 @@
 (function (root) {
   'use strict';
 
-  // Live human games. /game/live/<id> also serves a game after it ends.
-  const ONLINE = [/^\/play\/online(\/.*)?$/, /^\/game\/live\/\d+\/?$/];
+  // Live human games. Chess.com serves them at /game/<id> (current) and /game/live/<id>;
+  // the same URL keeps serving the game after it ends.
+  const ONLINE = [/^\/play\/online(\/.*)?$/, /^\/game\/live\/\d+\/?$/, /^\/game\/\d+\/?$/];
 
   // Daily (correspondence) games. Note: /daily is the Daily *Puzzle*, not Daily Chess.
   const DAILY = [/^\/game\/daily\/\d+\/?$/];

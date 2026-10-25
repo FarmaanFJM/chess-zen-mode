@@ -783,7 +783,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     await setSettings(helper, S({ online: { enabled: true }, daily: { enabled: true }, puzzle: { enabled: true }, analysis: { enabled: true } }));
     const p = await open(ctx, URLS.rated, { width: 1600, height: 900 });
     const marker = await p.evaluate(() => (window.__nav = Date.now()));
-    for (const [path, mode] of [['/play/online', 'online'], ['/game/daily/1', 'daily'], ['/analysis', 'analysis'], ['/news', null], ['/puzzles/rush', 'puzzle']]) {
+    for (const [path, mode] of [['/play/online', 'online'], ['/game/185921490914', 'online'], ['/game/daily/1', 'daily'], ['/analysis', 'analysis'], ['/news', null], ['/puzzles/rush', 'puzzle']]) {
       await p.evaluate((x) => history.pushState({}, '', x), path); await p.waitForTimeout(500);
       const cls = await p.evaluate(() => document.documentElement.className);
       const modes = ['online', 'daily', 'puzzle', 'analysis'].filter((m) => cls.includes(`czm-${m}`));
