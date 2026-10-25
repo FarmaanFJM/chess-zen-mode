@@ -45,6 +45,8 @@ const OFF = { online: { enabled: false }, daily: { enabled: false }, puzzle: { e
     await p.close();
   }
 
+  const only = process.env.ONLY; // e.g. ONLY=popup regenerates just the popup screenshot
+  if (!only) {
   await shoot('online', 'https://www.chess.com/play/online', null, 'online');
   await shoot('puzzles', 'https://www.chess.com/puzzles/rated', null, 'puzzle');
   await shoot('analysis', 'https://www.chess.com/analysis', async (p) => {
@@ -52,6 +54,7 @@ const OFF = { online: { enabled: false }, daily: { enabled: false }, puzzle: { e
     await p.waitForSelector('.engine-line-component', { timeout: 20000 });
     await p.waitForTimeout(3000); // let the engine settle on its lines
   }, 'analysis');
+  }
 
   // The real popup, with a few modes switched on to show the independent controls.
   await set({
