@@ -50,3 +50,31 @@ test('popup exposes a toggle for every persisted setting', () => {
   const expected = S.MODES.flatMap((m) => Object.keys(S.DEFAULTS[m]).map((k) => `${m}.${k}`)).sort();
   assert.deepEqual(paths, expected);
 });
+
+function pngSize(file) {
+  const b = fs.readFileSync(file);
+  assert.equal(b.toString('latin1', 1, 4), 'PNG', `${file} is not a PNG`);
+  return [b.readUInt32BE(16), b.readUInt32BE(20)];
+}
+
+test('branding: every manifest icon exists, is a PNG of exactly the declared size', () => {
+  const declared = { ...manifest.icons, ...manifest.action.default_icon };
+  assert.deepEqual(Object.keys(manifest.icons).sort(), ['128', '16', '32', '48']);
+  for (const [size, rel] of Object.entries(declared)) {
+    assert.match(rel, /^icons\/icon-\d+\.png$/);
+    assert.deepEqual(pngSize(path.join(root, rel)), [Number(size), Number(size)], rel);
+  }
+});
+
+test('branding: the original logo is kept in docs/assets and is square', () => {
+  const [w, h] = pngSize(path.join(root, 'docs/assets/chess-zen-mode-logo.png'));
+  assert.equal(w, h);
+  assert.ok(w >= 512);
+});
+
+test('branding: popup header shows the logo, name and tagline', () => {
+  const html = fs.readFileSync(path.join(root, 'src/popup/popup.html'), 'utf8');
+  assert.match(html, /src="\.\.\/\.\.\/icons\/icon-48\.png"/);
+  assert.match(html, /<h1>Chess Zen Mode<\/h1>/);
+  assert.match(html, /Focus on the board/);
+});

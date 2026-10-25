@@ -436,7 +436,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     await p.evaluate(() => localStorage.clear());
     await p.reload({ waitUntil: 'domcontentloaded' });
     await p.waitForSelector(BOARD); await p.waitForTimeout(1500);
-    await p.click('button:has-text("Ok")', { timeout: 1500 }).catch(() => {}); // guest intro modal returns after clearing storage
+    await p.click('button:has-text("Ok")', { timeout: 8000 }).catch(() => {}); // guest intro modal returns after clearing storage (can be slow)
     await p.waitForTimeout(500);
     const cx = async () => { const g = await geom(p); return (g.board.l + g.board.r) / 2 - g.vw / 2; };
     let w0, w1, w2, w3, w4;

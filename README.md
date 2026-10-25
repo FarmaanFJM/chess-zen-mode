@@ -1,10 +1,14 @@
-# Chess Zen Mode
+<p align="center">
+  <img src="docs/assets/chess-zen-mode-logo.png" alt="Chess Zen Mode logo: a relaxed green chess pawn with closed eyes sitting in a hot tub" width="220">
+</p>
 
-**Center the board. Hide the noise. Play and analyze Chess.com with nothing else on screen.**
+<h1 align="center">Chess Zen Mode</h1>
+
+<p align="center"><strong>Center the board. Hide the noise. Play and analyze Chess.com with nothing else on screen.</strong></p>
 
 Chess Zen Mode is a small Chrome/Chromium extension that centers the Chess.com chessboard in your browser window and hides the navigation sidebar, side panel and ads around it. One toggle turns it on, another restores the normal site, without reloading the page or interrupting a game.
 
-> **Status: v0.1.0 prototype – not released yet.** Nothing has been published on the [Releases page](https://github.com/FarmaanFJM/chess-zen-mode/releases) so far; when v0.1.0 appears there it will be marked as a pre-release. It has been tested automatically on logged-out guest pages only. See [Known limitations](#known-limitations-and-what-still-needs-manual-testing).
+> **Status: v0.1.0 prototype – not released yet.** Nothing has been published on the [Releases page](https://github.com/FarmaanFJM/chess-zen-mode/releases) so far; v0.1.0 is a prototype pre-release. It has been tested automatically on logged-out guest pages only. See [Known limitations](#known-limitations-and-what-still-needs-manual-testing).
 
 ## Before and after
 
@@ -158,7 +162,8 @@ src/content/             content script and zen.css (everything scoped to html.c
 src/popup/               popup UI
 test/unit/               node:test unit tests
 test/e2e/run.js          Playwright browser tests (live Chess.com guest pages)
-scripts/                 validate.js, package.js, screenshots.js
+scripts/                 validate.js, package.js, screenshots.js, make-icons.py
+icons/                   extension icons (generated from docs/assets/chess-zen-mode-logo.png)
 docs/                    release notes, test report, screenshots
 ```
 
@@ -177,4 +182,4 @@ Load the repository root with **Load unpacked** to develop; reload the extension
 
 ## Disclaimer
 
-Chess Zen Mode is an independent, unofficial extension. It is not affiliated with, endorsed by or sponsored by Chess.com. "Chess.com" is a trademark of its owner; screenshots show Chess.com's own interface only to illustrate what the extension changes.
+Chess Zen Mode is an independent, unofficial extension. It is not affiliated with, endorsed by or sponsored by Chess.com. The logo (a pawn in a hot tub) is this project's own artwork and does not use Chess.com's logo. "Chess.com" is a trademark of its owner; screenshots show Chess.com's own interface only to illustrate what the extension changes.
