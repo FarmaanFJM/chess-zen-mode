@@ -4,7 +4,7 @@ Run locally (GitHub CI unavailable). Browser tests: Playwright + Chromium (new h
 
 | Suite | Result |
 | --- | --- |
-| Unit tests (`npm test`) | PASS 35/35 |
+| Unit tests (`npm test`) | PASS 38/38 |
 | Browser tests (`npm run test:e2e`) | PASS 160/160 executed, 1 SKIPPED (see below) |
 | Manifest/ZIP validation (`npm run validate`, `package`) | PASS |
 
@@ -48,3 +48,8 @@ In Analysis Zen Mode the evaluation bar was invisible: Zen painted the backgroun
 3. **Puzzle Rush Survival:** Puzzle Zen with stats on; solved/mistakes/time values match Chess.com's sidebar and update live (selectors are unverified); toggling Zen mid-run does not reset the run.
 4. **Timed Puzzle Rush (3 min and 5 min):** the timer is uninterrupted while toggling Zen; stats time matches the site timer.
 5. Logged-in Analysis extras (multi-line engine settings, review tab), real browser zoom, Edge/Brave.
+
+## Branding check (logo integration)
+- Icons `icons/icon-{16,32,48,128}.png` exist in the ZIP with exactly the declared dimensions (unit test). 32/48/128 are plain Lanczos downscales; 16 px is a tighter crop of the same artwork so the pawn stays recognizable.
+- `chrome://extensions` card renders the logo (verified in Chromium). The **toolbar button itself could not be screenshotted** in headless Chromium; it uses the same manifest icons.
+- Popup header (logo, name, "Focus on the board") verified in a real popup screenshot; README images exist on the branch and all relative links resolve.
