@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chess Zen Mode</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>Chess Zen Mode</h1>
+    <p id="status" class="status" aria-live="polite"></p>
+  </header>
+
+  <section aria-labelledby="h-online">
+    <h2 id="h-online">Online Chess</h2>
+    <label class="row"><span>Online Zen Mode</span><input type="checkbox" data-path="online.enabled"></label>
+    <label class="row sub"><span>Show Left Sidebar</span><input type="checkbox" data-path="online.showLeft"></label>
+    <label class="row sub"><span>Show Right Panel</span><input type="checkbox" data-path="online.showRight"></label>
+  </section>
+
+  <section aria-labelledby="h-puzzle">
+    <h2 id="h-puzzle">Puzzles</h2>
+    <label class="row"><span>Puzzle Zen Mode</span><input type="checkbox" data-path="puzzle.enabled"></label>
+    <label class="row sub"><span>Show Left Sidebar</span><input type="checkbox" data-path="puzzle.showLeft"></label>
+    <label class="row sub"><span>Show Right Panel</span><input type="checkbox" data-path="puzzle.showRight"></label>
+    <label class="row sub"><span>Show Puzzle Stats</span><input type="checkbox" data-path="puzzle.showStats"></label>
+  </section>
+
+  <section aria-labelledby="h-look">
+    <h2 id="h-look">Appearance</h2>
+    <div class="row">
+      <label for="bg"><span>Background Color</span></label>
+      <span class="color">
+        <input type="color" id="bg" value="#000000">
+        <button type="button" id="reset" title="Reset to black">Default</button>
+      </span>
+    </div>
+  </section>
+
+  <script src="../lib/settings.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+/*
+ * Chess Zen Mode layout. Everything is scoped under html.czm-active, which the
+ * content script adds/removes; with the class absent this file has no effect.
+ *
+ * Chess.com lays the page out as a body CSS grid driven by custom properties
+ * (--verticalNavWidth, --sidebarMinWidth, ...). We override those properties
+ * instead of moving elements, so the board, its canvas/SVG overlays and the
+ * player bars all keep the site's own geometry.
+ */
+
+html.czm-active,
+html.czm-active body {
+  background: var(--czm-bg, #000) !important;
+}
+
+html.czm-active body {
+  --verticalNavWidth: var(--czm-left, 0px);
+  --gutterBoardToNav: 0px;
+  --bodyBoardGutterX: 0px;
+  --sidebarMinWidth: var(--czm-right, 0px);
+  --sidebarMaxWidth: var(--czm-right, 0px);
+  --adWidth: 0px;
+}
+
+/* Distractions: ads and the comments section below the board. */
+html.czm-active #board-layout-ad,
+html.czm-active #board-layout-comments {
+  display: none !important;
+}
+
+/* Left navigation. */
+html.czm-active.czm-hide-left #sidebar-main-menu,
+html.czm-active.czm-hide-left #mobile-toolbar {
+  display: none !important;
+}
+
+/* Right panel: when shown it fills the (mirrored) grid column. */
+html.czm-active #board-layout-sidebar {
+  min-width: 0;
+}
+
+/*
+ * Right panel hidden: keep it mounted (the site's scripts keep running, nothing is
+ * removed) but take it out of the layout. It stays reachable through the edge
+ * button, which slides it in over the page, so resign/draw/hint/next stay usable.
+ */
+html.czm-active.czm-hide-right #board-layout-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--czm-drawer-w, 380px);
+  max-width: 92vw;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  z-index: 2002;
+  background: var(--czm-bg, #000);
+  visibility: hidden;
+  transform: translateX(100%);
+  transition: transform 0.15s ease, visibility 0s linear 0.15s;
+}
+
+html.czm-active.czm-hide-right.czm-peek #board-layout-sidebar {
+  visibility: visible;
+  transform: none;
+  transition: transform 0.15s ease, visibility 0s;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.6);
+}
+
+/* Injected UI (removed when Zen Mode is off). */
+#czm-peek {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px 0 0 8px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font: 700 14px/1 system-ui, sans-serif;
+  cursor: pointer;
+  opacity: 0.35;
+  z-index: 2003;
+}
+#czm-peek:hover,
+#czm-peek:focus-visible,
+#czm-peek.czm-attention {
+  opacity: 1;
+}
+#czm-peek.czm-attention {
+  background: #e8a33d;
+  color: #111;
+}
+
+#czm-stats {
+  position: fixed;
+  z-index: 2001;
+  min-width: 110px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e6e6e6;
+  font: 12px/1.4 system-ui, sans-serif;
+  pointer-events: none;
+}
+#czm-stats[hidden] {
+  display: none;
+}
+#czm-stats .czm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+#czm-stats .czm-label {
+  color: #9a9a9a;
+}
+#czm-stats .czm-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+#czm-stats .czm-note {
+  color: #9a9a9a;
+}

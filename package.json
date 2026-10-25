@@ -1,0 +1,14 @@
+{
+  "name": "chess-zen-mode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chromium extension: distraction-free Chess.com online games and puzzles.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test \"test/unit/*.test.js\"",
+    "test:e2e": "node test/e2e/run.js",
+    "validate": "node scripts/validate.js",
+    "package": "node scripts/package.js"
+  },
+  "engines": { "node": ">=18" }
+}
