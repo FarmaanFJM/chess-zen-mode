@@ -7,9 +7,11 @@
 
   const { settings: S, pages: P, layout: L, stats: ST } = globalThis.ChessZen;
   const root = document.documentElement;
+  const PAGES = S.MODES;
   const VARS = ['--czm-bg', '--czm-left', '--czm-right', '--czm-drawer-w'];
   const BOARD_SELECTOR = '#board-layout-main wc-chess-board, #board-layout-main .board-layout-chessboard .board';
-  const ATTENTION_RE = /(?:^|[\s_-])(?:draw|offer)s?(?:[\s_-]|$)/i;
+  const ATTENTION_RE = /(?:^|[\s_-])(?:draw|offer|confirm|submit)s?(?:[\s_-]|$)/i;
+  const MIRROR_KEY = 'czm:last'; // synchronous copy of the settings, only used to avoid a layout flash
 
   let current = S.normalize(null);
   let active = null; // { page, mode } while Zen Mode is applied
@@ -22,13 +24,28 @@
   let peekBtn = null;
   let statsEl = null;
   let waitObs = null;
+  let observedEls = new WeakSet();
 
   const q = (sel) => document.querySelector(sel);
+  // clientWidth is 0 until first layout when running at document_start.
+  const viewportWidth = () => root.clientWidth || window.innerWidth;
+
+  function readMirror() {
+    try {
+      const raw = localStorage.getItem(MIRROR_KEY);
+      return raw ? S.normalize(JSON.parse(raw)) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  function writeMirror(settings) {
+    try { localStorage.setItem(MIRROR_KEY, JSON.stringify(settings)); } catch (_) { /* optional */ }
+  }
 
   /* ---------- injected UI ---------- */
 
   function ensurePeek() {
-    if (peekBtn) return;
+    if (peekBtn || !document.body) return;
     peekBtn = document.createElement('button');
     peekBtn.id = 'czm-peek';
     peekBtn.type = 'button';
@@ -73,7 +90,7 @@
   }
 
   function ensureStats() {
-    if (statsEl) return;
+    if (statsEl || !document.body) return;
     statsEl = document.createElement('div');
     statsEl.id = 'czm-stats';
     statsEl.setAttribute('role', 'status');
@@ -135,21 +152,25 @@
     raf = 0;
     if (!active) return;
     const cfg = current[active.page];
-    const vw = root.clientWidth;
+    const vw = viewportWidth();
     if (vw < L.MIN_VIEWPORT_WIDTH) return apply();
 
     const nav = q('#sidebar-main-menu');
     const navW = cfg.showLeft && nav && nav.getBoundingClientRect().width > 0
       ? nav.getBoundingClientRect().width
       : L.NAV_WIDTH;
-    const res = L.computeReserves({ vw, vh: window.innerHeight, showLeft: cfg.showLeft, showRight: cfg.showRight, navW });
+    const size = L.panelSize(active.page);
+    const res = L.computeReserves({
+      vw, vh: window.innerHeight, showLeft: cfg.showLeft, showRight: cfg.showRight, navW,
+      panelPref: size.pref, panelMin: size.min,
+    });
     const showRight = cfg.showRight && res.rightFits;
 
     root.classList.toggle('czm-hide-left', !cfg.showLeft);
     root.classList.toggle('czm-hide-right', !showRight);
     root.style.setProperty('--czm-left', `${res.left}px`);
     root.style.setProperty('--czm-right', `${res.right}px`);
-    root.style.setProperty('--czm-drawer-w', `${Math.min(L.PANEL_PREFERRED, Math.round(vw * 0.92))}px`);
+    root.style.setProperty('--czm-drawer-w', `${Math.min(size.pref, Math.round(vw * 0.92))}px`);
     if (showRight) removePeek();
     else ensurePeek();
 
@@ -182,11 +203,11 @@
   function onSidebarMutation(records) {
     if (!active) return;
     if (statsEl) renderStats();
-    if (peekBtn && !root.classList.contains('czm-peek') && active.page === 'online') {
+    if (peekBtn && !root.classList.contains('czm-peek') && (active.page === 'online' || active.page === 'daily')) {
       for (const rec of records) {
         for (const n of rec.addedNodes) {
           if (n.nodeType !== 1) continue;
-          if (ATTENTION_RE.test(String(n.className)) || n.querySelector('[class*="draw"], [class*="offer"]')) {
+          if (ATTENTION_RE.test(String(n.className)) || n.querySelector('[class*="draw"], [class*="offer"], [class*="confirm"], [class*="submit"]')) {
             peekBtn.classList.add('czm-attention');
             return;
           }
@@ -198,11 +219,14 @@
   function observeLayout() {
     if (!resizeObs) {
       resizeObs = new ResizeObserver(scheduleLayout);
-      const main = q('#board-layout-main');
-      if (main) resizeObs.observe(main);
-      const board = q(BOARD_SELECTOR);
-      if (board) resizeObs.observe(board);
       resizeObs.observe(root);
+    }
+    // The board can mount after we activate at document_start; observe it once it exists.
+    for (const el of [q('#board-layout-main'), q(BOARD_SELECTOR)]) {
+      if (el && !observedEls.has(el)) {
+        observedEls.add(el);
+        resizeObs.observe(el);
+      }
     }
     const sidebar = q('#board-layout-sidebar');
     if (sidebar !== observedSidebar) {
@@ -218,6 +242,7 @@
   function stopObservers() {
     if (resizeObs) resizeObs.disconnect();
     resizeObs = null;
+    observedEls = new WeakSet();
     if (sidebarObs) sidebarObs.disconnect();
     sidebarObs = null;
     observedSidebar = null;
@@ -237,7 +262,7 @@
     const main = q('#board-layout-main');
     if (main) main.style.left = '';
     shift = 0;
-    root.classList.remove('czm-active', 'czm-online', 'czm-puzzle', 'czm-hide-left', 'czm-hide-right', 'czm-peek');
+    root.classList.remove('czm-active', ...PAGES.map((m) => `czm-${m}`), 'czm-hide-left', 'czm-hide-right', 'czm-peek');
     VARS.forEach((v) => root.style.removeProperty(v));
   }
 
@@ -247,8 +272,7 @@
     const changed = !active || active.page !== page || active.mode !== mode;
     active = { page, mode };
     root.classList.add('czm-active');
-    root.classList.toggle('czm-online', page === 'online');
-    root.classList.toggle('czm-puzzle', page === 'puzzle');
+    PAGES.forEach((m) => root.classList.toggle(`czm-${m}`, m === page));
     root.style.setProperty('--czm-bg', current.bgColor);
     if (changed) shift = 0;
 
@@ -268,18 +292,23 @@
       reason = page ? 'disabled' : 'unsupported';
       return deactivate();
     }
-    if (root.clientWidth < L.MIN_VIEWPORT_WIDTH) {
+    if (viewportWidth() < L.MIN_VIEWPORT_WIDTH) {
       reason = 'narrow';
       return deactivate();
     }
-    if (!q('#board-layout-main') || !q(BOARD_SELECTOR)) {
+    const boardReady = !!(q('#board-layout-main') && q(BOARD_SELECTOR));
+    if (!boardReady && document.readyState !== 'loading') {
       reason = 'no-board';
       deactivate();
       waitForBoard();
       return;
     }
-    reason = 'active';
+    // While the document is still loading we activate straight away (classes + CSS
+    // variables only) so the page never paints the original layout first; the board
+    // is attached to the observers as soon as it exists.
+    reason = boardReady ? 'active' : 'loading';
     activate(page);
+    if (!boardReady) waitForBoard();
   }
 
   /** The board can mount after load; wait for it without polling. */
@@ -292,7 +321,7 @@
         apply();
       }
     });
-    waitObs.observe(document.body || root, { childList: true, subtree: true });
+    waitObs.observe(root, { childList: true, subtree: true });
   }
 
   /* ---------- wiring ---------- */
@@ -314,12 +343,20 @@
     if (window.navigation && window.navigation.addEventListener) {
       window.navigation.addEventListener('navigatesuccess', onPossibleNavigation);
     }
-    const title = document.querySelector('title');
-    if (title) new MutationObserver(onPossibleNavigation).observe(title, { childList: true });
+    const watchTitle = () => {
+      const title = document.querySelector('title');
+      if (title) new MutationObserver(onPossibleNavigation).observe(title, { childList: true });
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => { watchTitle(); apply(); }, { once: true });
+    } else {
+      watchTitle();
+    }
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local' || !changes[S.KEY]) return;
       current = S.normalize(changes[S.KEY].newValue);
+      writeMirror(current);
       apply();
     });
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -335,8 +372,16 @@
       }
     });
 
+    // Fast path: last known settings, available synchronously at document_start.
+    const early = readMirror();
+    if (early) {
+      current = early;
+      apply();
+    }
+    // Source of truth: extension storage.
     S.load(chrome.storage.local).then((s) => {
       current = s;
+      writeMirror(s);
       apply();
     }).catch(() => { /* storage unavailable: stay inert */ });
   }

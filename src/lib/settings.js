@@ -5,11 +5,16 @@
   const KEY = 'chessZenSettings';
   const DEFAULT_BG = '#000000';
 
+  // Analysis keeps Chess.com's own engine/analysis panel visible by default.
   const DEFAULTS = Object.freeze({
     online: Object.freeze({ enabled: false, showLeft: false, showRight: false }),
+    daily: Object.freeze({ enabled: false, showLeft: false, showRight: false }),
     puzzle: Object.freeze({ enabled: false, showLeft: false, showRight: false, showStats: false }),
+    analysis: Object.freeze({ enabled: false, showLeft: false, showRight: true }),
     bgColor: DEFAULT_BG,
   });
+
+  const MODES = Object.freeze(['online', 'daily', 'puzzle', 'analysis']);
 
   function isHexColor(v) {
     return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
@@ -22,22 +27,16 @@
   /** Coerce arbitrary stored data into a complete, valid settings object. */
   function normalize(raw) {
     const r = raw && typeof raw === 'object' ? raw : {};
-    const o = r.online && typeof r.online === 'object' ? r.online : {};
-    const p = r.puzzle && typeof r.puzzle === 'object' ? r.puzzle : {};
-    return {
-      online: {
-        enabled: bool(o.enabled, DEFAULTS.online.enabled),
-        showLeft: bool(o.showLeft, DEFAULTS.online.showLeft),
-        showRight: bool(o.showRight, DEFAULTS.online.showRight),
-      },
-      puzzle: {
-        enabled: bool(p.enabled, DEFAULTS.puzzle.enabled),
-        showLeft: bool(p.showLeft, DEFAULTS.puzzle.showLeft),
-        showRight: bool(p.showRight, DEFAULTS.puzzle.showRight),
-        showStats: bool(p.showStats, DEFAULTS.puzzle.showStats),
-      },
-      bgColor: isHexColor(r.bgColor) ? r.bgColor.toLowerCase() : DEFAULT_BG,
-    };
+    const out = { bgColor: isHexColor(r.bgColor) ? r.bgColor.toLowerCase() : DEFAULT_BG };
+    // Each mode is validated key by key against its own defaults, so older stored
+    // settings (missing newer modes) upgrade cleanly and modes never leak into each other.
+    for (const mode of MODES) {
+      const src = r[mode] && typeof r[mode] === 'object' ? r[mode] : {};
+      const mine = {};
+      for (const key of Object.keys(DEFAULTS[mode])) mine[key] = bool(src[key], DEFAULTS[mode][key]);
+      out[mode] = mine;
+    }
+    return out;
   }
 
   async function load(area) {
@@ -57,7 +56,7 @@
     return normalize(current);
   }
 
-  const api = { KEY, DEFAULT_BG, DEFAULTS, isHexColor, normalize, load, save, update };
+  const api = { KEY, DEFAULT_BG, DEFAULTS, MODES, isHexColor, normalize, load, save, update };
   root.ChessZen = Object.assign(root.ChessZen || {}, { settings: api });
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

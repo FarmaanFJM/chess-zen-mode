@@ -25,8 +25,13 @@ const URLS = {
   rated: 'https://www.chess.com/puzzles/rated',
   rush: 'https://www.chess.com/puzzles/rush',
   news: 'https://www.chess.com/news',
+  daily: 'https://www.chess.com/game/daily/1044546360', // in-progress public Daily game (guest sees the play shell only)
+  analysis: 'https://www.chess.com/analysis',
+  dailyPuzzle: 'https://www.chess.com/daily',
 };
-const BOARD = 'wc-chess-board';
+const MODE_OF = { online: 'online', daily: 'daily', rated: 'puzzle', rush: 'puzzle', analysis: 'analysis' };
+// Matches wc-chess-board (puzzles/play/analysis) and the plain div board some shells use.
+const BOARD = '#board-layout-main .board-layout-chessboard .board';
 
 const results = [];
 function record(name, ok, detail = '') {
@@ -40,6 +45,10 @@ async function check(name, fn) {
   } catch (e) {
     record(name, false, String(e.message || e).split('\n')[0]);
   }
+}
+function skip(name, reason) {
+  results.push({ name, ok: true, skipped: true, detail: reason });
+  console.log(`SKIP  ${name}  -- ${reason}`);
 }
 function ok(cond, msg) { if (!cond) throw new Error(msg); }
 const near = (a, b, tol, msg) => ok(Math.abs(a - b) <= tol, `${msg}: ${a.toFixed(1)} vs ${b.toFixed(1)} (tol ${tol})`);
@@ -56,9 +65,13 @@ async function launch() {
 async function setSettings(helper, s) {
   await helper.evaluate((val) => chrome.storage.local.set({ chessZenSettings: val }), s);
 }
+// Explicit baseline: everything off and every panel hidden (including analysis, whose
+// *product* default is visible; that default is tested separately with empty storage).
 const S = (o = {}) => ({
   online: { enabled: false, showLeft: false, showRight: false, ...(o.online || {}) },
+  daily: { enabled: false, showLeft: false, showRight: false, ...(o.daily || {}) },
   puzzle: { enabled: false, showLeft: false, showRight: false, showStats: false, ...(o.puzzle || {}) },
+  analysis: { enabled: false, showLeft: false, showRight: false, ...(o.analysis || {}) },
   bgColor: o.bgColor || '#000000',
 });
 
@@ -70,9 +83,14 @@ async function open(ctx, url, vp) {
   await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await p.waitForSelector(BOARD, { timeout: 30000 });
   await p.waitForTimeout(1500);
-  // Guests get an intro modal on puzzle pages that blocks hover/clicks on the board area.
+  // Guests get an intro modal on puzzle/analysis pages that blocks hover/clicks on the board area.
   await p.click('button:has-text("Ok")', { timeout: 1500 }).catch(() => {});
   await p.waitForTimeout(500);
+  if (url.includes('/analysis')) { // load the real analysis UI (engine toggle + lines)
+    await p.click('text=New Analysis', { timeout: 4000 }).catch(() => {});
+    await p.waitForSelector('.engine-line-component', { timeout: 20000 }).catch(() => {});
+    await p.waitForTimeout(500);
+  }
   return p;
 }
 
@@ -131,6 +149,7 @@ async function alignment(p) {
   ok(Math.abs(info.w - info.h) <= 1.5, `not square: ${info.w}x${info.h}`);
   ok(info.worst < 1.5, `pieces off-grid by ${info.worst.toFixed(2)}px`);
   ok(info.sizeOff < 1.5, `piece size mismatch ${info.sizeOff.toFixed(2)}px`);
+  if (!(await p.$(`${BOARD} .piece`))) return; // placeholder board (guest Daily shell): squareness only
   const t = await p.evaluate((sel) => { const el = [...document.querySelectorAll(`${sel} .piece`)].find((e) => /\bw[pqrnbk]\b/.test(e.className)); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, BOARD);
   await p.mouse.click(t.x, t.y);
   await p.waitForTimeout(400);
@@ -147,11 +166,11 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
   const helper = await ctx.newPage();
   await helper.goto(`chrome-extension://${EXT_ID}/src/popup/popup.html`);
 
-  const pageSets = [['online', URLS.online], ['rated', URLS.rated], ['rush', URLS.rush]];
+  const pageSets = [['online', URLS.online], ['daily', URLS.daily], ['rated', URLS.rated], ['rush', URLS.rush], ['analysis', URLS.analysis]];
   const sizes = [[1920, 1080], [2560, 1440], [1366, 768], [1280, 720]];
 
   for (const [key, url] of pageSets) {
-    const kind = key === 'online' ? 'online' : 'puzzle';
+    const kind = MODE_OF[key];
     await setSettings(helper, S());
     const p = await open(ctx, url, { width: 1920, height: 1080 });
     const base = await geom(p);
@@ -290,7 +309,8 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     // Board overlay alignment: select a piece, verify hints sit on the board grid.
     await setSettings(helper, S({ [kind]: { enabled: true, showRight: true } }));
     await waitSettled(p);
-    await check(`[${key}] pieces/overlays align to the board grid and are clickable`, async () => {
+    if (key === 'daily') skip(`[daily] pieces/overlays align to the board grid and are clickable`, 'guest sees only the play shell (no pieces); needs a logged-in Daily game');
+    else await check(`[${key}] pieces/overlays align to the board grid and are clickable`, async () => {
       const info = await p.evaluate((sel) => {
         const b = document.querySelector(sel).getBoundingClientRect();
         const sq = b.width / 8;
@@ -399,7 +419,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
 
   // ---- Native board resizing must keep working: before, during and after Zen Mode ----
   for (const [key, url] of pageSets) {
-    const kind = key === 'online' ? 'online' : 'puzzle';
+    const kind = MODE_OF[key];
     await setSettings(helper, S());
     const p = await open(ctx, url, { width: 1500, height: 900 });
     await p.evaluate(() => localStorage.clear());
@@ -569,30 +589,266 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     await pop.goto(`chrome-extension://${EXT_ID}/src/popup/popup.html`);
     await pop.waitForTimeout(300);
     const states = await pop.$$eval('input[data-path]', (els) => els.map((e) => [e.dataset.path, e.checked]));
-    ok(states.every(([, c]) => c === false), `all off by default: ${JSON.stringify(states)}`);
+    ok(states.length === 13, `expected 13 toggles, got ${states.length}`);
+    ok(states.every(([k, c]) => c === (k === 'analysis.showRight')), `defaults are all off except the analysis panel: ${JSON.stringify(states)}`);
     ok((await pop.inputValue('#bg')) === '#000000', 'default color black');
     await pop.close();
   });
 
-  // Persistence across a full browser restart.
-  await setSettings(helper, S({ puzzle: { enabled: true, showStats: true }, bgColor: '#101820' }));
+  // ---- Analysis Board: Chess.com's own engine panel must be preserved ----
+  const ENGINE = {
+    toggle: '#board-layout-sidebar input#analysis',
+    toggleLabel: '#board-layout-sidebar label.switch-group-label[for="analysis"]',
+    lines: '#board-layout-sidebar .engine-line-component',
+    evalBar: 'wc-evaluation-bar',
+    nav: '#board-layout-sidebar .game-controls-primary-component button',
+  };
+  const inView = (p, sel, label) => p.evaluate(({ sel, label }) => {
+    const els = [...document.querySelectorAll(sel)];
+    const el = els.find((e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; });
+    if (!el) throw new Error(`${label}: not visible`);
+    const r = el.getBoundingClientRect();
+    if (r.right > document.documentElement.clientWidth + 0.5 || r.left < -0.5 || r.top < -0.5 || r.bottom > innerHeight + 0.5) throw new Error(`${label}: outside viewport (${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)})`);
+    return els.length;
+  }, { sel, label });
+
+  await setSettings(helper, S());
+  const pa = await open(ctx, URLS.analysis, { width: 1920, height: 1080 });
+  const engineChecked = () => pa.evaluate((sel) => document.querySelector(sel)?.checked, ENGINE.toggle);
+
+  await check('[analysis] engine panel is Chess.com\'s own (toggle, lines, eval bar, navigation) before Zen', async () => {
+    ok(await engineChecked() === true, 'engine toggle should exist and be on by default for the guest');
+    ok((await inView(pa, ENGINE.lines, 'engine lines')) >= 1, 'no engine lines');
+    await inView(pa, ENGINE.evalBar, 'eval bar');
+    await inView(pa, ENGINE.nav, 'nav buttons');
+  });
+
+  await check('[analysis] product defaults: Zen on => analysis panel stays visible, left sidebar hidden, board centered', async () => {
+    await helper.evaluate(() => chrome.storage.local.set({ chessZenSettings: { analysis: { enabled: true } } }));
+    await pa.waitForTimeout(800);
+    const g = await geom(pa);
+    ok(g.cls.includes('czm-active') && g.cls.includes('czm-analysis'), `class: ${g.cls}`);
+    ok(!g.navVisible, 'left nav hidden by default');
+    ok(g.sideVisible && !g.cls.includes('czm-hide-right'), 'analysis panel visible by default');
+    ok(g.side.l >= g.board.r - 0.5, 'panel beside board, no overlap');
+    near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'board center');
+    ok(!g.peek, 'no drawer button while docked');
+  });
+
+  await check('[analysis] with Zen on: engine toggle, lines, eval bar and move navigation are visible and in the viewport', async () => {
+    ok(await engineChecked() === true, 'engine state unchanged');
+    ok((await inView(pa, ENGINE.lines, 'engine lines')) >= 1, 'no engine lines');
+    await inView(pa, ENGINE.toggleLabel, 'engine toggle');
+    await inView(pa, ENGINE.evalBar, 'eval bar');
+    await inView(pa, ENGINE.nav, 'nav buttons');
+    const depth = await pa.evaluate(() => document.querySelector('.analysis-options-depth')?.textContent || '');
+    ok(/depth=\d+/.test(depth), `engine info line missing: "${depth}"`);
+  });
+
+  await check('[analysis] native engine toggle works in Zen; Zen never flips it', async () => {
+    await pa.click(ENGINE.toggleLabel);
+    await pa.waitForTimeout(600);
+    ok(await engineChecked() === false, 'user could not disable the engine');
+    // enabling/disabling Zen and panel changes must not re-enable a disabled engine
+    await setSettings(helper, S({ analysis: { enabled: true, showRight: true } })); await waitSettled(pa);
+    ok(await engineChecked() === false, 'Zen re-enabled the engine');
+    await setSettings(helper, S()); await waitSettled(pa);
+    ok(await engineChecked() === false, 'restoring layout re-enabled the engine');
+    await setSettings(helper, S({ analysis: { enabled: true, showRight: true } })); await waitSettled(pa);
+    ok(await engineChecked() === false, 'enabling Zen re-enabled the engine');
+    await pa.click(ENGINE.toggleLabel); await pa.waitForTimeout(800);
+    ok(await engineChecked() === true, 'user could not re-enable the engine');
+    ok((await inView(pa, ENGINE.lines, 'engine lines')) >= 1, 'lines should come back');
+  });
+
+  await check('[analysis] position and variations survive Zen on/off and panel changes', async () => {
+    const play = async (from, to) => {
+      const b = await pa.evaluate((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return { l: r.left, t: r.top, sq: r.width / 8 }; }, BOARD);
+      const at = ([f, r]) => ({ x: b.l + (f + 0.5) * b.sq, y: b.t + (8 - r + 0.5) * b.sq });
+      const a = at(from), c = at(to);
+      await pa.mouse.click(a.x, a.y); await pa.waitForTimeout(250);
+      await pa.mouse.click(c.x, c.y); await pa.waitForTimeout(700);
+    };
+    const moves = () => pa.evaluate(() => (document.querySelector('wc-move-list')?.textContent || '').replace(/\s+/g, ' ').trim());
+    await setSettings(helper, S()); await waitSettled(pa);
+    await play([4, 2], [4, 4]); // e4
+    const m1 = await moves();
+    ok(/e4/.test(m1), `move not recorded: "${m1}"`);
+    await setSettings(helper, S({ analysis: { enabled: true, showRight: true } })); await waitSettled(pa);
+    ok(/e4/.test(await moves()), 'move list lost on enabling Zen');
+    await play([4, 7], [4, 5]); // ...e5 (alignment of clicks after Zen layout shift)
+    ok(/e4.*e5/.test(await moves()), `click-to-move misaligned in Zen: "${await moves()}"`);
+    await setSettings(helper, S({ analysis: { enabled: true, showRight: false } })); await waitSettled(pa);
+    ok(/e4.*e5/.test(await moves()), 'move list lost when hiding the panel');
+    await setSettings(helper, S()); await waitSettled(pa);
+    ok(/e4.*e5/.test(await moves()), 'move list lost on disabling Zen');
+  });
+
+  await check('[analysis] hidden panel: engine toggle and lines reachable via the edge tab', async () => {
+    await setSettings(helper, S({ analysis: { enabled: true, showRight: false } })); await waitSettled(pa);
+    let g = await geom(pa);
+    ok(!g.sideVisible && g.peek, 'panel should be in drawer mode');
+    await pa.click('#czm-peek'); await pa.waitForTimeout(400);
+    await inView(pa, ENGINE.toggleLabel, 'engine toggle (drawer)');
+    await inView(pa, ENGINE.lines, 'engine lines (drawer)');
+    const before = await engineChecked();
+    await pa.click(ENGINE.toggleLabel); await pa.waitForTimeout(500);
+    ok((await engineChecked()) === !before, 'toggle inside drawer did nothing');
+    await pa.click(ENGINE.toggleLabel); await pa.waitForTimeout(500);
+    ok((await engineChecked()) === before, 'could not restore toggle');
+    await pa.keyboard.press('Escape'); await pa.waitForTimeout(300);
+  });
+
+  await check('[analysis] narrow window: panel collapses to the drawer, board stays usable and centered', async () => {
+    await setSettings(helper, S({ analysis: { enabled: true, showRight: true } })); await waitSettled(pa);
+    await pa.setViewportSize({ width: 1100, height: 800 }); await pa.waitForTimeout(600);
+    const g = await geom(pa);
+    ok(g.peek && !g.sideVisible, 'should collapse to drawer');
+    ok(g.board.w >= 400, `board too small: ${g.board.w}`);
+    near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'center');
+    await pa.click('#czm-peek'); await pa.waitForTimeout(400);
+    await inView(pa, ENGINE.toggleLabel, 'engine toggle (narrow drawer)');
+    await pa.keyboard.press('Escape');
+    await pa.setViewportSize({ width: 1920, height: 1080 }); await pa.waitForTimeout(500);
+    ok((await geom(pa)).sideVisible, 'panel docks again when the window widens');
+  });
+
+  await check('[analysis] original layout restored exactly; engine panel intact', async () => {
+    await setSettings(helper, S()); await waitSettled(pa);
+    const g = await geom(pa);
+    ok(!g.cls.includes('czm-') && g.navVisible && g.sideVisible && !g.peek, `not restored: ${g.cls}`);
+    ok((await inView(pa, ENGINE.lines, 'engine lines')) >= 1, 'engine lines missing after restore');
+    await inView(pa, ENGINE.toggleLabel, 'engine toggle');
+  });
+  await pa.close();
+
+  // ---- Fair play: strict page/mode separation ----
+  await check('fair play: Analysis Zen never applies to Online/Daily game pages, and game modes never apply to analysis', async () => {
+    await setSettings(helper, S({ analysis: { enabled: true, showRight: true } }));
+    const p = await ctx.newPage(); await p.setViewportSize({ width: 1600, height: 900 });
+    for (const u of [URLS.online, URLS.daily]) {
+      await p.goto(u, { waitUntil: 'domcontentloaded', timeout: 60000 }); await p.waitForTimeout(3000);
+      const cls = await p.evaluate(() => document.documentElement.className);
+      ok(!cls.includes('czm-'), `Analysis Zen leaked onto ${u}: ${cls}`);
+    }
+    await setSettings(helper, S({ online: { enabled: true }, daily: { enabled: true }, puzzle: { enabled: true } }));
+    await p.goto(URLS.analysis, { waitUntil: 'domcontentloaded', timeout: 60000 }); await p.waitForTimeout(3000);
+    const cls = await p.evaluate(() => document.documentElement.className);
+    ok(!cls.includes('czm-'), `game/puzzle Zen leaked onto analysis: ${cls}`);
+    await p.close();
+  });
+
+  // ---- Mode isolation across every page type (real navigations) ----
+  await check('each mode activates only on its own page type (4 modes x 4 pages + Daily Puzzle out of scope)', async () => {
+    const p = await ctx.newPage(); await p.setViewportSize({ width: 1600, height: 900 });
+    const pages = { online: URLS.online, daily: URLS.daily, puzzle: URLS.rated, analysis: URLS.analysis };
+    for (const mode of Object.keys(pages)) {
+      await setSettings(helper, S({ [mode]: { enabled: true } }));
+      for (const [pageMode, url] of Object.entries(pages)) {
+        await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }); await p.waitForTimeout(2500);
+        const cls = await p.evaluate(() => document.documentElement.className);
+        const on = cls.includes('czm-active') && cls.includes(`czm-${pageMode}`);
+        ok(on === (mode === pageMode), `mode=${mode} page=${pageMode}: ${cls}`);
+      }
+    }
+    await setSettings(helper, S({ online: { enabled: true }, daily: { enabled: true }, puzzle: { enabled: true }, analysis: { enabled: true } }));
+    await p.goto(URLS.dailyPuzzle, { waitUntil: 'domcontentloaded', timeout: 60000 }); await p.waitForTimeout(2500);
+    ok(!(await p.evaluate(() => document.documentElement.className)).includes('czm-'), '/daily (Daily Puzzle) must stay out of scope');
+    await p.close();
+  });
+
+  await check('client-side navigation between all four page types switches the active mode without reload', async () => {
+    await setSettings(helper, S({ online: { enabled: true }, daily: { enabled: true }, puzzle: { enabled: true }, analysis: { enabled: true } }));
+    const p = await open(ctx, URLS.rated, { width: 1600, height: 900 });
+    const marker = await p.evaluate(() => (window.__nav = Date.now()));
+    for (const [path, mode] of [['/play/online', 'online'], ['/game/daily/1', 'daily'], ['/analysis', 'analysis'], ['/news', null], ['/puzzles/rush', 'puzzle']]) {
+      await p.evaluate((x) => history.pushState({}, '', x), path); await p.waitForTimeout(500);
+      const cls = await p.evaluate(() => document.documentElement.className);
+      const modes = ['online', 'daily', 'puzzle', 'analysis'].filter((m) => cls.includes(`czm-${m}`));
+      ok(mode === null ? modes.length === 0 && !cls.includes('czm-active') : modes.length === 1 && modes[0] === mode, `${path}: ${cls}`);
+    }
+    ok((await p.evaluate(() => window.__nav)) === marker, 'page reloaded');
+    await p.close();
+  });
+
+  // ---- Flash avoidance: layout is applied before the board is first inserted ----
+  await check('no flash: Zen layout is already applied when the board first appears (settings known from a previous visit)', async () => {
+    await setSettings(helper, S({ online: { enabled: true }, daily: { enabled: true }, puzzle: { enabled: true }, analysis: { enabled: true, showRight: true } }));
+    for (const [name, url] of [['online', URLS.online], ['puzzle', URLS.rated], ['analysis', URLS.analysis], ['daily', URLS.daily]]) {
+      const prime = await ctx.newPage(); await prime.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }); await prime.waitForTimeout(1500); await prime.close();
+      const p = await ctx.newPage();
+      await p.addInitScript(() => {
+        window.__czmProbe = { early: null };
+        const mo = new MutationObserver(() => {
+          if (window.__czmProbe.early === null && document.querySelector('#board-layout-main')) {
+            window.__czmProbe.early = document.documentElement.classList.contains('czm-active') && !!document.documentElement.style.getPropertyValue('--czm-bg');
+            mo.disconnect();
+          }
+        });
+        mo.observe(document, { childList: true, subtree: true });
+      });
+      await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }); await p.waitForTimeout(2500);
+      const early = await p.evaluate(() => window.__czmProbe.early);
+      await p.close();
+      ok(early === true, `${name}: layout not applied before first board render (early=${early})`);
+    }
+  });
+
+  // ---- Persistence across a full browser restart: all four modes, visibility prefs, color ----
+  const FULL = S({
+    online: { enabled: true, showLeft: true, showRight: false },
+    daily: { enabled: true, showLeft: false, showRight: true },
+    puzzle: { enabled: true, showLeft: false, showRight: false, showStats: true },
+    analysis: { enabled: true, showLeft: true, showRight: false },
+    bgColor: '#101820',
+  });
+  await setSettings(helper, FULL);
   await ctx.close();
   const ctx2 = await launch();
-  await check('settings persist across browser restart and apply on load', async () => {
-    const p = await open(ctx2, URLS.rated, { width: 1600, height: 900 });
-    await p.waitForTimeout(800);
-    const g = await geom(p);
-    ok(g.cls.includes('czm-active') && g.stats, `not applied after restart: ${g.cls}`);
-    ok(g.bodyBg === 'rgb(16, 24, 32)', `bg after restart ${g.bodyBg}`);
-    near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'center after restart');
-    await p.reload({ waitUntil: 'domcontentloaded' });
-    await p.waitForSelector(BOARD); await p.waitForTimeout(1500);
-    ok((await geom(p)).cls.includes('czm-active'), 'applied after page refresh');
+  const helper2 = await ctx2.newPage();
+  await helper2.goto(`chrome-extension://${EXT_ID}/src/popup/popup.html`);
+  await check('stored settings are intact after browser restart (all modes, visibility, stats, color)', async () => {
+    const stored = await helper2.evaluate(() => chrome.storage.local.get('chessZenSettings'));
+    const canon = (o) => JSON.stringify(o, (k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([x], [y]) => x.localeCompare(y))) : v));
+    ok(canon(stored.chessZenSettings) === canon(FULL), `storage differs: ${JSON.stringify(stored)}`);
+  });
+  for (const [key, url] of [['online', URLS.online], ['daily', URLS.daily], ['rated', URLS.rated], ['analysis', URLS.analysis]]) {
+    await check(`[${key}] after restart: Zen auto-activates with the saved visibility, background and centering`, async () => {
+      const mode = MODE_OF[key]; const cfg = FULL[mode];
+      const p = await open(ctx2, url, { width: 1600, height: 900 });
+      await p.waitForTimeout(800);
+      const g = await geom(p);
+      ok(g.cls.includes('czm-active') && g.cls.includes(`czm-${mode}`), `not applied after restart: ${g.cls}`);
+      ok(g.bodyBg === 'rgb(16, 24, 32)', `bg after restart ${g.bodyBg}`);
+      ok(g.navVisible === cfg.showLeft, `left sidebar visible=${g.navVisible}, saved=${cfg.showLeft}`);
+      ok(g.sideVisible === cfg.showRight, `right panel visible=${g.sideVisible}, saved=${cfg.showRight}`);
+      ok(g.stats === !!cfg.showStats, `stats panel=${g.stats}, saved=${!!cfg.showStats}`);
+      if (!cfg.showLeft && !cfg.showRight) near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'center after restart');
+      await p.reload({ waitUntil: 'domcontentloaded' });
+      await p.waitForSelector(BOARD); await p.waitForTimeout(1500);
+      ok((await geom(p)).cls.includes(`czm-${mode}`), 'applied after page refresh');
+      await p.close();
+    });
+  }
+  await check('settings stay consistent across multiple tabs (live propagation of each mode toggle)', async () => {
+    const a = await open(ctx2, URLS.online, { width: 1600, height: 900 });
+    const b = await open(ctx2, URLS.online, { width: 1600, height: 900 });
+    const d = await open(ctx2, URLS.daily, { width: 1600, height: 900 });
+    await setSettings(helper2, S({ online: { enabled: false }, daily: { enabled: true } }));
+    await a.waitForTimeout(800);
+    for (const t of [a, b]) ok(!(await geom(t)).cls.includes('czm-active'), 'online tabs should turn off together');
+    ok((await geom(d)).cls.includes('czm-daily'), 'daily tab stays on');
+    await setSettings(helper2, S({ online: { enabled: true }, daily: { enabled: false }, bgColor: '#202020' }));
+    await a.waitForTimeout(800); await a.bringToFront(); await a.waitForTimeout(500);
+    for (const t of [a, b]) ok((await geom(t)).cls.includes('czm-online'), 'online tabs should turn on together');
+    ok(!(await geom(d)).cls.includes('czm-active'), 'daily tab should turn off');
+    await a.close(); await b.close(); await d.close();
   });
   await ctx2.close();
 
   const failed = results.filter((r) => !r.ok);
-  console.log(`\n${results.length - failed.length}/${results.length} passed`);
+  const skipped = results.filter((r) => r.skipped);
+  console.log(`\n${results.length - failed.length - skipped.length}/${results.length - skipped.length} passed, ${skipped.length} skipped (not testable as a guest)`);
   fs.writeFileSync(path.join(os.tmpdir(), 'czm-e2e-results.json'), JSON.stringify(results, null, 2));
   process.exit(failed.length ? 1 : 0);
 })();

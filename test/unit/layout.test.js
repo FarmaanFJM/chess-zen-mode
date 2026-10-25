@@ -64,3 +64,12 @@ test('computeShift never overlaps a right panel', () => {
   const d = L.computeShift({ boardLeft: 0, boardWidth: 700, vw: 1200, maxRight: 800 });
   assert.ok(0 + d + 700 <= 800);
 });
+
+test('analysis gets a wider panel so engine lines stay readable', () => {
+  assert.deepEqual(L.panelSize('analysis'), { pref: 460, min: 320 });
+  assert.deepEqual(L.panelSize('online'), { pref: L.PANEL_PREFERRED, min: L.PANEL_MIN });
+  const a = L.computeReserves({ vw: 1920, vh: 1080, showRight: true, panelPref: 460, panelMin: 320 });
+  assert.equal(a.right, 460);
+  const narrow = L.computeReserves({ vw: 1100, vh: 800, showRight: true, panelPref: 460, panelMin: 320 });
+  assert.equal(narrow.rightFits, false); // falls back to the drawer; board stays usable
+});

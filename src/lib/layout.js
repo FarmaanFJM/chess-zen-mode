@@ -7,6 +7,11 @@
   const NAV_WIDTH = 170;
   const PANEL_PREFERRED = 380;
   const PANEL_MIN = 260;
+  // Analysis needs a wider panel for engine lines.
+  const PANEL_SIZES = { analysis: { pref: 460, min: 320 } };
+  function panelSize(page) {
+    return PANEL_SIZES[page] || { pref: PANEL_PREFERRED, min: PANEL_MIN };
+  }
   // Space the site keeps around the board column (gutters, eval bar, controls).
   const BOARD_SLACK = 120;
 
@@ -59,7 +64,7 @@
   }
 
   const api = {
-    MIN_VIEWPORT_WIDTH, NAV_WIDTH, PANEL_PREFERRED, PANEL_MIN, BOARD_SLACK,
+    MIN_VIEWPORT_WIDTH, NAV_WIDTH, PANEL_PREFERRED, PANEL_MIN, BOARD_SLACK, panelSize,
     computeReserves, computeShift,
   };
   root.ChessZen = Object.assign(root.ChessZen || {}, { layout: api });
