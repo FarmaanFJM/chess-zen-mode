@@ -35,3 +35,13 @@ Run locally (GitHub CI unavailable). Browser tests: Playwright + Chromium (new h
 - Real browser zoom (equivalent smaller viewports tested), Edge/Brave, high-DPI/multi-monitor, touch.
 - First-ever page load before any settings copy exists can briefly show the original layout (the flash fix relies on a copy of the last settings; the cold path is not asserted).
 - Draw/offer/confirm indicator on the edge tab is a class-name heuristic.
+
+## Skipped test (not counted as a pass)
+`[daily] pieces/overlays align to the board grid and are clickable` is SKIPPED: guests only receive the play-page shell for Daily games, which has no pieces. The suite reports it as `SKIP` and the totals above count only executed checks (159 executed + 1 skipped = 160).
+
+## Outstanding manual tests (required before release)
+1. **Authenticated Online game:** enable Online Zen; board centered; both clocks tick; premove, drag/click moves, arrows/highlights aligned; resign and draw offer/response reachable via the edge tab; resize board with the native handle; disable Zen mid-game with no interruption.
+2. **Daily Chess game:** same as above plus move confirmation, conditional moves, remaining-time display and game actions reachable with the right panel hidden.
+3. **Puzzle Rush Survival:** Puzzle Zen with stats on; solved/mistakes/time values match Chess.com's sidebar and update live (selectors are unverified); toggling Zen mid-run does not reset the run.
+4. **Timed Puzzle Rush (3 min and 5 min):** the timer is uninterrupted while toggling Zen; stats time matches the site timer.
+5. Logged-in Analysis extras (multi-line engine settings, review tab), real browser zoom, Edge/Brave.

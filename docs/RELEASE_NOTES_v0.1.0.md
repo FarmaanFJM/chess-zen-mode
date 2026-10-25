@@ -1,5 +1,7 @@
 ## Chess Zen Mode v0.1.0 (prototype)
 
+> **Not fully validated.** Automated tests ran only against logged-out guest pages. Manual testing is still required for authenticated Online games, Daily Chess, Puzzle Rush Survival and timed Puzzle Rush (3 min / 5 min). See the manual checklist in `docs/TEST_REPORT_v0.1.0.md`.
+
 Center the Chess.com board and hide the clutter with one toggle; switch it off to get the normal site back, mid-game, without a reload. Four independent modes: **Online Chess, Daily Chess, Puzzles, Analysis Board**.
 
 **Features**
@@ -15,7 +17,7 @@ Center the Chess.com board and hide the clutter with one toggle; switch it off t
 
 **Install:** extract the ZIP, open `chrome://extensions`, enable Developer mode, **Load unpacked**, pick the extracted folder.
 
-**Tested (automated, headless Chromium, real Chess.com guest pages incl. the live Analysis Board with Stockfish):** 159 browser checks + 35 unit tests pass, 1 browser check skipped (the browser suite was re-run against the extracted release ZIP). Covered: centering at 1280–2560 px wide, live resize, native resize-handle drags in all modes (before/during/after Zen), zoom-equivalent viewports, panel combinations, drawer access, engine toggle/lines/eval bar visibility and state preservation, position kept across Zen on/off, exact restore on disable, every mode activating only on its own page type (real and client-side navigation), tab consistency, restart persistence, no-flash activation, popup.
+**Tested (automated, headless Chromium, real Chess.com guest pages incl. the live Analysis Board with Stockfish):** 159 browser checks + 35 unit tests pass; **1 browser check was SKIPPED, not passed** (Daily piece/overlay alignment: a guest cannot open a real Daily game) (the browser suite was re-run against the extracted release ZIP). Covered: centering at 1280–2560 px wide, live resize, native resize-handle drags in all modes (before/during/after Zen), zoom-equivalent viewports, panel combinations, drawer access, engine toggle/lines/eval bar visibility and state preservation, position kept across Zen on/off, exact restore on disable, every mode activating only on its own page type (real and client-side navigation), tab consistency, restart persistence, no-flash activation, popup.
 
 **NOT tested – needs a human:** a real logged-in Daily game (guests only get the page shell: move confirmation, conditional moves, clocks, resign/draw), a real logged-in live game (clocks ticking, premoves, arrows, offers), logged-in Puzzle Rush Survival/3-min/5-min (stat selectors are unverified), logged-in analysis extras (multi-line settings, saved/review tabs), real browser zoom, Edge/Brave, multi-monitor.
 
