@@ -21,7 +21,12 @@
   let resizeObs = null;
   let sidebarObs = null;
   let observedSidebar = null;
-  let peekBtn = null;
+  let edgeL = null; // fixed quick toggles at the window edges
+  let edgeR = null;
+  let sideState = 'off'; // right panel: 'docked' | 'dropped' (wanted but no room) | 'off'
+  let overlayOpen = false; // transient: dropped panel shown over the page
+  let openOnLayout = false;
+  let shiftY = 0;
   let statsEl = null;
   let waitObs = null;
   let observedEls = new WeakSet();
@@ -44,49 +49,85 @@
 
   /* ---------- injected UI ---------- */
 
-  function ensurePeek() {
-    if (peekBtn || !document.body) return;
-    peekBtn = document.createElement('button');
-    peekBtn.id = 'czm-peek';
-    peekBtn.type = 'button';
-    peekBtn.textContent = '‹';
-    peekBtn.title = 'Show game panel (Chess Zen Mode)';
-    peekBtn.setAttribute('aria-label', 'Show game panel');
-    peekBtn.addEventListener('click', onPeekClick);
-    document.body.appendChild(peekBtn);
-    document.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('mousedown', onOutsideDown, true);
+  function mkEdge(id, side, onClick) {
+    const b = document.createElement('button');
+    b.id = id;
+    b.type = 'button';
+    b.className = `czm-edge czm-edge-${side}`;
+    b.addEventListener('click', onClick);
+    document.body.appendChild(b);
+    return b;
   }
 
-  function removePeek() {
-    if (!peekBtn) return;
-    peekBtn.remove();
-    peekBtn = null;
-    root.classList.remove('czm-peek');
+  function ensureEdges() {
+    if (edgeL || !document.body) return;
+    edgeL = mkEdge('czm-edge-left', 'left', () => toggleSide('showLeft'));
+    edgeR = mkEdge('czm-edge-right', 'right', onRightClick);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('mousedown', onOutsideDown, true);
+    updateEdges();
+  }
+
+  function removeEdges() {
+    if (edgeL) edgeL.remove();
+    if (edgeR) edgeR.remove();
+    edgeL = edgeR = null;
+    overlayOpen = false;
+    openOnLayout = false;
     document.removeEventListener('keydown', onKeyDown, true);
     document.removeEventListener('mousedown', onOutsideDown, true);
   }
 
-  function setPeek(open) {
-    root.classList.toggle('czm-peek', open);
-    if (peekBtn) {
-      peekBtn.textContent = open ? '›' : '‹';
-      peekBtn.classList.remove('czm-attention');
+  /** Arrow + label always describe what the click will do. */
+  function updateEdges() {
+    if (!edgeL || !active) return;
+    const cfg = current[active.page];
+    const set = (b, open, what, closeArrow, openArrow) => {
+      b.textContent = open ? closeArrow : openArrow;
+      const label = `${open ? 'Hide' : 'Show'} ${what} (Chess Zen Mode)`;
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      b.setAttribute('aria-pressed', String(open));
+    };
+    set(edgeL, cfg.showLeft, 'left sidebar', '\u2039', '\u203A');
+    set(edgeR, sideState === 'docked' || overlayOpen, active.page === 'analysis' ? 'analysis panel' : 'right panel', '\u203A', '\u2039');
+    if (sideState === 'docked' || overlayOpen) edgeR.classList.remove('czm-attention');
+  }
+
+  /** Flip a saved preference; the popup and other tabs follow through storage. */
+  function toggleSide(key) {
+    if (!active) return;
+    const page = active.page;
+    const next = !current[page][key];
+    if (key === 'showRight' && next) openOnLayout = true;
+    current[page][key] = next; // optimistic, storage.onChanged confirms
+    layoutNow();
+    S.update(chrome.storage.local, (st) => { st[page][key] = next; }).catch(() => {});
+  }
+
+  function onRightClick() {
+    if (!active) return;
+    if (sideState === 'dropped') { // setting is already on, there is just no room to dock
+      overlayOpen = !overlayOpen;
+      layoutNow();
+    } else {
+      toggleSide('showRight');
     }
   }
 
-  function onPeekClick() {
-    setPeek(!root.classList.contains('czm-peek'));
+  function closeOverlay() {
+    overlayOpen = false;
+    layoutNow();
   }
 
   function onKeyDown(e) {
-    if (e.key === 'Escape' && root.classList.contains('czm-peek')) setPeek(false);
+    if (e.key === 'Escape' && overlayOpen) closeOverlay();
   }
 
   function onOutsideDown(e) {
-    if (!root.classList.contains('czm-peek')) return;
+    if (!overlayOpen) return;
     const panel = q('#board-layout-sidebar');
-    if (panel && !panel.contains(e.target) && e.target !== peekBtn) setPeek(false);
+    if (panel && !panel.contains(e.target) && e.target !== edgeR) closeOverlay();
   }
 
   function ensureStats() {
@@ -136,7 +177,7 @@
     const vw = root.clientWidth;
     const leftEdge = root.classList.contains('czm-hide-left') ? 8 : L.NAV_WIDTH + 8;
     const sidebar = q('#board-layout-sidebar');
-    const panelShown = sidebar && !root.classList.contains('czm-hide-right');
+    const panelShown = sidebar && !root.classList.contains('czm-hide-right'); // docked or open overlay
     const rightEdge = panelShown ? sidebar.getBoundingClientRect().left - 8 : vw - 8;
     let left;
     if (b.left - w - 16 >= leftEdge) left = b.left - w - 16;
@@ -165,14 +206,19 @@
       panelPref: size.pref, panelMin: size.min,
     });
     const showRight = cfg.showRight && res.rightFits;
+    sideState = showRight ? 'docked' : cfg.showRight ? 'dropped' : 'off';
+    if (sideState === 'dropped' && openOnLayout) overlayOpen = true;
+    if (sideState !== 'dropped') overlayOpen = false;
+    openOnLayout = false;
 
     root.classList.toggle('czm-hide-left', !cfg.showLeft);
-    root.classList.toggle('czm-hide-right', !showRight);
+    root.classList.toggle('czm-hide-right', !showRight && !overlayOpen);
+    root.classList.toggle('czm-overlay-right', overlayOpen);
     root.style.setProperty('--czm-left', `${res.left}px`);
     root.style.setProperty('--czm-right', `${res.right}px`);
     root.style.setProperty('--czm-drawer-w', `${Math.min(size.pref, Math.round(vw * 0.92))}px`);
-    if (showRight) removePeek();
-    else ensurePeek();
+    ensureEdges();
+    updateEdges();
 
     // Fine alignment: put the board itself (not the wider layout column) on the center line.
     const main = q('#board-layout-main');
@@ -190,6 +236,18 @@
       });
       shift = Math.round(delta * 2) / 2;
       main.style.left = shift === 0 ? '' : `${shift}px`;
+
+      // Vertical: when the window is taller than the board block (e.g. full screen), center it.
+      // (#board-layout-main itself stretches to the grid row, so measure its visible children.)
+      const kids = Array.from(main.children).map((c) => c.getBoundingClientRect()).filter((k) => k.height > 0);
+      let dy = 0;
+      if (kids.length) {
+        const top = Math.min(...kids.map((k) => k.top));
+        const bottom = Math.max(...kids.map((k) => k.bottom));
+        dy = L.computeVerticalShift({ top: top - shiftY, height: bottom - top, vh: window.innerHeight });
+      }
+      shiftY = Math.round(dy * 2) / 2;
+      main.style.top = shiftY === 0 ? '' : `${shiftY}px`;
     }
     if (statsEl) positionStats();
   }
@@ -203,12 +261,12 @@
   function onSidebarMutation(records) {
     if (!active) return;
     if (statsEl) renderStats();
-    if (peekBtn && !root.classList.contains('czm-peek') && (active.page === 'online' || active.page === 'daily')) {
+    if (edgeR && sideState !== 'docked' && !overlayOpen && (active.page === 'online' || active.page === 'daily')) {
       for (const rec of records) {
         for (const n of rec.addedNodes) {
           if (n.nodeType !== 1) continue;
           if (ATTENTION_RE.test(String(n.className)) || n.querySelector('[class*="draw"], [class*="offer"], [class*="confirm"], [class*="submit"]')) {
-            peekBtn.classList.add('czm-attention');
+            edgeR.classList.add('czm-attention');
             return;
           }
         }
@@ -257,12 +315,14 @@
   function deactivate() {
     active = null;
     stopObservers();
-    removePeek();
+    removeEdges();
     removeStats();
     const main = q('#board-layout-main');
-    if (main) main.style.left = '';
+    if (main) { main.style.left = ''; main.style.top = ''; }
     shift = 0;
-    root.classList.remove('czm-active', ...PAGES.map((m) => `czm-${m}`), 'czm-hide-left', 'czm-hide-right', 'czm-peek');
+    shiftY = 0;
+    sideState = 'off';
+    root.classList.remove('czm-active', ...PAGES.map((m) => `czm-${m}`), 'czm-hide-left', 'czm-hide-right', 'czm-overlay-right');
     VARS.forEach((v) => root.style.removeProperty(v));
   }
 
@@ -274,7 +334,7 @@
     root.classList.add('czm-active');
     PAGES.forEach((m) => root.classList.toggle(`czm-${m}`, m === page));
     root.style.setProperty('--czm-bg', current.bgColor);
-    if (changed) shift = 0;
+    if (changed) { shift = 0; shiftY = 0; }
 
     if (page === 'puzzle' && cfg.showStats) ensureStats();
     else removeStats();
@@ -334,7 +394,17 @@
   }
 
   function init() {
-    window.addEventListener('resize', scheduleLayout, { passive: true });
+    // Window resizes, zoom and full-screen changes: lay out now and again once the site's own
+    // size variables have settled (they update a moment after the viewport changes).
+    let settleTimers = [];
+    const scheduleSettle = () => {
+      scheduleLayout();
+      settleTimers.forEach(clearTimeout);
+      settleTimers = [150, 500].map((ms) => setTimeout(scheduleLayout, ms));
+    };
+    window.addEventListener('resize', scheduleSettle, { passive: true });
+    document.addEventListener('fullscreenchange', scheduleSettle);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', scheduleSettle, { passive: true });
     window.addEventListener('resize', () => {
       if (!active && current[P.detectPage(location.href)]?.enabled) apply();
     }, { passive: true });
@@ -362,12 +432,11 @@
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (msg && msg.type === 'czm:status') {
         const page = P.detectPage(location.href);
-        const sideHidden = root.classList.contains('czm-hide-right');
         sendResponse({
           page,
           active: !!active,
           reason,
-          panelDropped: !!(active && current[active.page].showRight && sideHidden),
+          panelDropped: !!active && sideState === 'dropped',
         });
       }
     });

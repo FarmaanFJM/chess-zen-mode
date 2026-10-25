@@ -105,7 +105,15 @@ const geom = (p) => p.evaluate((sel) => {
     board: r(document.querySelector(sel)),
     navVisible: vis(nav), nav: r(nav),
     sideVisible: vis(side), side: r(side),
-    peek: !!document.querySelector('#czm-peek'),
+    edges: !!document.querySelector('#czm-edge-left') && !!document.querySelector('#czm-edge-right'),
+    overlay: document.documentElement.classList.contains('czm-overlay-right'),
+    edgeL: (() => { const r = document.querySelector('#czm-edge-left')?.getBoundingClientRect(); return r && { l: r.left, r: r.right, t: r.top, text: document.querySelector('#czm-edge-left').textContent }; })(),
+    edgeR: (() => { const r = document.querySelector('#czm-edge-right')?.getBoundingClientRect(); return r && { l: r.left, r: r.right, t: r.top, text: document.querySelector('#czm-edge-right').textContent }; })(),
+    ...(() => { // visible extent of the board block (the main box itself stretches to the grid row)
+      const kids = [...(document.querySelector('#board-layout-main')?.children || [])].map((c) => c.getBoundingClientRect()).filter((k) => k.height > 0);
+      const top = Math.min(...kids.map((k) => k.top)), bottom = Math.max(...kids.map((k) => k.bottom));
+      return { mainTop: top, mainH: bottom - top };
+    })(),
     stats: !!document.querySelector('#czm-stats'),
     bodyBg: getComputedStyle(document.documentElement).backgroundColor, // Zen paints the canvas via <html>
     bodyTransparent: getComputedStyle(document.body).backgroundColor === 'rgba(0, 0, 0, 0)',
@@ -177,6 +185,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
   await helper.goto(`chrome-extension://${EXT_ID}/src/popup/popup.html`);
 
   const pageSets = [['online', URLS.online], ['daily', URLS.daily], ['rated', URLS.rated], ['rush', URLS.rush], ['analysis', URLS.analysis]];
+if (process.env.E2E_PAGES) pageSets.splice(0, pageSets.length, ...pageSets.filter(([k]) => process.env.E2E_PAGES.split(',').includes(k))); // debugging aid
   const sizes = [[1920, 1080], [2560, 1440], [1366, 768], [1280, 720]];
 
   for (const [key, url] of pageSets) {
@@ -204,7 +213,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
         ok(g.board.l >= 0 && g.board.r <= g.vw, 'board horizontal fit');
         ok(!g.navVisible, 'left nav should be hidden');
         ok(!g.sideVisible, 'right panel should be hidden');
-        ok(g.peek, 'panel edge button should exist');
+        ok(g.edges, 'both edge toggles should exist');
         return `scrollbar=${g.scrollbar}px board=${Math.round(g.board.w)}px`;
       });
     }
@@ -262,7 +271,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
       ok(g.side.l >= g.board.r - 0.5, `panel left ${g.side.l} < board right ${g.board.r}`);
       ok(g.side.r <= g.vw + 0.5, 'panel inside viewport');
       near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'center');
-      ok(!g.peek, 'edge button removed while panel docked');
+      ok(g.edges && g.edgeR.text === '\u203A', 'right toggle offers to hide the docked panel');
     });
     await check(`[${key}] right panel + 1366x768: still fits and board centered`, async () => {
       await p.setViewportSize({ width: 1366, height: 768 });
@@ -271,12 +280,19 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
       ok(g.sideVisible, 'panel visible'); ok(g.side.l >= g.board.r - 0.5, 'no overlap'); ok(g.side.r <= g.vw + 0.5, 'in viewport');
       near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'center');
     });
-    await check(`[${key}] right panel + very narrow window: board wins, panel dropped to drawer`, async () => {
+    await check(`[${key}] right panel + very narrow window: board wins, panel offered as an overlay via the edge toggle`, async () => {
       await p.setViewportSize({ width: 1000, height: 800 });
       await p.waitForTimeout(500);
-      const g = await geom(p);
-      ok(!g.sideVisible && g.peek, 'panel should fall back to the drawer');
+      let g = await geom(p);
+      ok(!g.sideVisible && g.edges, 'panel should not cover the board by default');
       near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'center');
+      await p.click('#czm-edge-right'); await p.waitForTimeout(400);
+      g = await geom(p);
+      ok(g.sideVisible && g.overlay, 'edge toggle should open the panel as an overlay');
+      const saved = await helper.evaluate((k) => chrome.storage.local.get('chessZenSettings').then((r) => r.chessZenSettings[k].showRight), kind);
+      ok(saved === true, 'saved setting stays on');
+      await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+      ok(!(await geom(p)).sideVisible, 'Esc closes the overlay');
       await p.setViewportSize({ width: 1920, height: 1080 });
     });
 
@@ -289,20 +305,51 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
       near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'center');
     });
 
-    // Drawer (panel hidden) keeps controls reachable.
+    // Quick toggles at the window edges: real open/close controls tied to the saved settings.
     await setSettings(helper, S({ [kind]: { enabled: true } }));
     await waitSettled(p);
-    await check(`[${key}] hidden panel is reachable via edge drawer; Esc closes`, async () => {
-      await p.click('#czm-peek');
-      await p.waitForTimeout(400);
+    const saved = (k) => helper.evaluate((m) => chrome.storage.local.get('chessZenSettings').then((r) => r.chessZenSettings[m.mode][m.k]), { mode: kind, k });
+    await check(`[${key}] right edge toggle opens AND closes the panel and updates the saved setting`, async () => {
       let g = await geom(p);
-      ok(g.sideVisible, 'drawer open shows panel');
-      const centered = (g.board.l + g.board.r) / 2;
-      near(centered, g.vw / 2, 2, 'board does not move while drawer is open');
-      await p.keyboard.press('Escape');
-      await p.waitForTimeout(400);
+      const posBefore = { l: g.edgeR.l, t: g.edgeR.t };
+      ok(!g.sideVisible && g.edgeR.text === '\u2039', 'starts closed, offers to open');
+      await p.click('#czm-edge-right'); await p.waitForTimeout(600);
       g = await geom(p);
-      ok(!g.sideVisible, 'Esc closes drawer');
+      ok(g.sideVisible, 'panel opened'); ok(!g.overlay, 'docked, not overlay');
+      ok(g.edgeR.text === '\u203A', 'arrow now offers to close');
+      ok(await saved('showRight') === true, 'setting not saved');
+      ok(Math.abs(g.edgeR.l - posBefore.l) < 0.5 && Math.abs(g.edgeR.t - posBefore.t) < 0.5, 'toggle must stay where it was');
+      near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'board stays centered with panel open');
+      await p.click('#czm-edge-right'); await p.waitForTimeout(600);
+      g = await geom(p);
+      ok(!g.sideVisible && g.edgeR.text === '\u2039', 'panel closed again');
+      ok(await saved('showRight') === false, 'setting not saved on close');
+      near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'center after close');
+    });
+    await check(`[${key}] left edge toggle shows and hides the sidebar, saves the setting, stays put`, async () => {
+      let g = await geom(p);
+      const posBefore = { l: g.edgeL.l, t: g.edgeL.t };
+      ok(!g.navVisible && g.edgeL.text === '\u203A', 'starts hidden, offers to show');
+      await p.click('#czm-edge-left'); await p.waitForTimeout(600);
+      g = await geom(p);
+      ok(g.navVisible && g.edgeL.text === '\u2039', 'sidebar shown, arrow offers to hide');
+      ok(await saved('showLeft') === true, 'setting not saved');
+      ok(Math.abs(g.edgeL.l - posBefore.l) < 0.5 && Math.abs(g.edgeL.t - posBefore.t) < 0.5, 'toggle must stay where it was');
+      ok(g.board.l >= g.nav.r, 'board clear of sidebar');
+      await p.click('#czm-edge-left'); await p.waitForTimeout(600);
+      g = await geom(p);
+      ok(!g.navVisible && await saved('showLeft') === false, 'sidebar hidden and saved');
+    });
+    await check(`[${key}] popup switches mirror the edge toggles (and vice versa)`, async () => {
+      const pop = await ctx.newPage();
+      await pop.goto(`chrome-extension://${EXT_ID}/src/popup/popup.html`);
+      const sel = `input[data-path="${kind}.showRight"]`;
+      ok(!(await pop.isChecked(sel)), 'popup starts off');
+      await p.click('#czm-edge-right'); await p.waitForTimeout(600);
+      ok(await pop.isChecked(sel), 'popup did not follow the edge toggle');
+      await pop.uncheck(sel, { force: true }); await p.waitForTimeout(600);
+      ok(!(await geom(p)).sideVisible, 'edge/page did not follow the popup');
+      await pop.close();
     });
 
     await check(`[${key}] background color default + custom, board untouched`, async () => {
@@ -336,7 +383,11 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
         });
         return { n: pieces.length, worst: Math.max(...pieces) };
       }, BOARD);
-      ok(info.n > 0, 'no pieces found');
+      if (info.n === 0) {
+        const dbg = await p.evaluate((sel) => { const b = document.querySelector(sel); return b ? `${b.tagName} children=${b.children.length} rect=${JSON.stringify(b.getBoundingClientRect())} url=${location.href} cls=${document.documentElement.className}` : 'no board'; }, BOARD);
+        await p.screenshot({ path: path.join(os.tmpdir(), `czm-nopieces-${key}.png`) });
+        throw new Error(`no pieces found (${dbg})`);
+      }
       ok(info.worst < 1.5, `piece misaligned by ${info.worst.toFixed(2)}px`);
       // Click a piece: the site should draw its selection/hint overlays inside the board.
       const target = await p.evaluate((sel) => {
@@ -371,7 +422,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
       const g = await geom(p);
       ok(!g.cls.includes('czm-'), `classes left behind: ${g.cls}`);
       ok(g.navVisible && g.sideVisible, 'nav and sidebar back');
-      ok(!g.peek && !g.stats, 'injected UI removed');
+      ok(!g.edges && !g.stats, 'injected UI removed');
       ok(g.mainLeftInline === '', 'inline offset removed');
       for (const k of ['l', 't', 'w', 'h']) near(g.board[k], base.board[k], 1, `board.${k} vs baseline`);
       const leftover = await p.evaluate(() => document.documentElement.getAttribute('style') || '');
@@ -388,6 +439,8 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     });
     await p.close();
   }
+
+  if (process.env.E2E_STOP_AFTER_PAGES) { console.log('stopped after per-page checks (debug)'); await ctx.close(); process.exit(results.some((r) => !r.ok) ? 1 : 0); }
 
   // ---- Stats panel wiring (synthetic sidebar content) ----
   await check('[puzzle] stats panel: shown/hidden independently, live updates, degrades gracefully', async () => {
@@ -528,6 +581,42 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     await p.close();
   }
 
+  // ---- Full screen / tall windows: the board block re-centers (vertically and horizontally) ----
+  for (const [key, url] of [['online', URLS.online], ['rated', URLS.rated], ['analysis', URLS.analysis]]) {
+    await check(`[${key}] entering/leaving full screen (taller window) keeps the board centered both ways`, async () => {
+      const kind = MODE_OF[key];
+      await setSettings(helper, S());
+      const p = await open(ctx, url, { width: 1500, height: 900 });
+      await p.evaluate(() => localStorage.clear());
+      await p.reload({ waitUntil: 'domcontentloaded' });
+      await p.waitForSelector(BOARD); await p.waitForTimeout(1500);
+      await p.click('button:has-text("Ok")', { timeout: 8000 }).catch(() => {});
+      if (key === 'analysis') { await p.click('text=New Analysis', { timeout: 4000 }).catch(() => {}); await p.waitForTimeout(1500); }
+      await dragResize(p, -220); // a saved native size smaller than the window allows (like a user who resized)
+      await setSettings(helper, S({ [kind]: { enabled: true, showRight: false } })); await waitSettled(p);
+      const centered = async (label) => {
+        const g = await geom(p);
+        near((g.board.l + g.board.r) / 2, g.vw / 2, 2, `${label}: horizontal`);
+        const topGap = g.mainTop, bottomGap = g.ih - (g.mainTop + g.mainH);
+        if (g.ih - g.mainH > 40) near(topGap, bottomGap, 2, `${label}: vertical gap top vs bottom`);
+        return g;
+      };
+      await centered('windowed');
+      await p.setViewportSize({ width: 2000, height: 1128 }); // what full screen does
+      await p.evaluate(() => document.dispatchEvent(new Event('fullscreenchange')));
+      await p.waitForTimeout(900);
+      const g = await centered('full screen');
+      ok(g.mainTop > 20, `block should have moved down to the middle, top=${g.mainTop}`);
+      await p.setViewportSize({ width: 1500, height: 900 }); await p.waitForTimeout(900);
+      await centered('back to windowed');
+      await p.setViewportSize({ width: 1500, height: 900 });
+      await setSettings(helper, S()); await waitSettled(p);
+      ok((await p.evaluate(() => document.querySelector('#board-layout-main').style.top)) === '', 'vertical offset removed on disable');
+      await p.evaluate(() => localStorage.clear());
+      await p.close();
+    });
+  }
+
   // ---- Scope, navigation, tabs, popup, persistence ----
   await check('out-of-scope pages are untouched even with both modes on', async () => {
     await setSettings(helper, S({ online: { enabled: true }, puzzle: { enabled: true } }));
@@ -643,7 +732,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     ok(g.sideVisible && !g.cls.includes('czm-hide-right'), 'analysis panel visible by default');
     ok(g.side.l >= g.board.r - 0.5, 'panel beside board, no overlap');
     near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'board center');
-    ok(!g.peek, 'no drawer button while docked');
+    ok(g.edges, 'edge toggles present');
   });
 
   await check('[analysis] with Zen on: engine toggle, lines, eval bar and move navigation are visible and in the viewport', async () => {
@@ -709,27 +798,28 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
   await check('[analysis] hidden panel: engine toggle and lines reachable via the edge tab', async () => {
     await setSettings(helper, S({ analysis: { enabled: true, showRight: false } })); await waitSettled(pa);
     let g = await geom(pa);
-    ok(!g.sideVisible && g.peek, 'panel should be in drawer mode');
-    await pa.click('#czm-peek'); await pa.waitForTimeout(400);
-    await inView(pa, ENGINE.toggleLabel, 'engine toggle (drawer)');
-    await inView(pa, ENGINE.lines, 'engine lines (drawer)');
+    ok(!g.sideVisible && g.edges, 'panel should be closed with the edge toggle available');
+    await pa.click('#czm-edge-right'); await pa.waitForTimeout(600);
+    await inView(pa, ENGINE.toggleLabel, 'engine toggle (opened via edge toggle)');
+    await inView(pa, ENGINE.lines, 'engine lines (opened via edge toggle)');
     const before = await engineChecked();
     await pa.click(ENGINE.toggleLabel); await pa.waitForTimeout(500);
     ok((await engineChecked()) === !before, 'toggle inside drawer did nothing');
     await pa.click(ENGINE.toggleLabel); await pa.waitForTimeout(500);
     ok((await engineChecked()) === before, 'could not restore toggle');
-    await pa.keyboard.press('Escape'); await pa.waitForTimeout(300);
+    await pa.click('#czm-edge-right'); await pa.waitForTimeout(500);
+    ok(!(await geom(pa)).sideVisible, 'edge toggle closes the panel again');
   });
 
   await check('[analysis] narrow window: panel collapses to the drawer, board stays usable and centered', async () => {
     await setSettings(helper, S({ analysis: { enabled: true, showRight: true } })); await waitSettled(pa);
     await pa.setViewportSize({ width: 1100, height: 800 }); await pa.waitForTimeout(600);
     const g = await geom(pa);
-    ok(g.peek && !g.sideVisible, 'should collapse to drawer');
+    ok(g.edges && !g.sideVisible, 'should collapse (open on demand via the edge toggle)');
     ok(g.board.w >= 400, `board too small: ${g.board.w}`);
     near((g.board.l + g.board.r) / 2, g.vw / 2, 2, 'center');
-    await pa.click('#czm-peek'); await pa.waitForTimeout(400);
-    await inView(pa, ENGINE.toggleLabel, 'engine toggle (narrow drawer)');
+    await pa.click('#czm-edge-right'); await pa.waitForTimeout(400);
+    await inView(pa, ENGINE.toggleLabel, 'engine toggle (narrow overlay)');
     await pa.keyboard.press('Escape');
     await pa.setViewportSize({ width: 1920, height: 1080 }); await pa.waitForTimeout(500);
     ok((await geom(pa)).sideVisible, 'panel docks again when the window widens');
@@ -738,7 +828,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
   await check('[analysis] original layout restored exactly; engine panel intact', async () => {
     await setSettings(helper, S()); await waitSettled(pa);
     const g = await geom(pa);
-    ok(!g.cls.includes('czm-') && g.navVisible && g.sideVisible && !g.peek, `not restored: ${g.cls}`);
+    ok(!g.cls.includes('czm-') && g.navVisible && g.sideVisible && !g.edges, `not restored: ${g.cls}`);
     ok((await inView(pa, ENGINE.lines, 'engine lines')) >= 1, 'engine lines missing after restore');
     await inView(pa, ENGINE.toggleLabel, 'engine toggle');
   });

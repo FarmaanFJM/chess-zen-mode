@@ -73,3 +73,15 @@ test('analysis gets a wider panel so engine lines stay readable', () => {
   const narrow = L.computeReserves({ vw: 1100, vh: 800, showRight: true, panelPref: 460, panelMin: 320 });
   assert.equal(narrow.rightFits, false); // falls back to the drawer; board stays usable
 });
+
+test('vertical centering: only when the window is taller than the board block', () => {
+  // 868px block at natural top 16 in a 1128px-tall (full-screen) window -> centered at 130
+  assert.equal(L.computeVerticalShift({ top: 16, height: 868, vh: 1128 }), 114);
+  // already centered
+  assert.equal(L.computeVerticalShift({ top: 130, height: 868, vh: 1128 }), 0);
+  // no spare room: keep the site's own top-aligned layout (never negative)
+  assert.equal(L.computeVerticalShift({ top: 16, height: 868, vh: 900 }), 0);
+  assert.equal(L.computeVerticalShift({ top: 16, height: 1200, vh: 900 }), 0);
+  // block already lower than centered: never pulled up
+  assert.equal(L.computeVerticalShift({ top: 400, height: 500, vh: 1000 }), 0);
+});
