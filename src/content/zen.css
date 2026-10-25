@@ -47,11 +47,12 @@ html.czm-active #board-layout-sidebar {
 }
 
 /*
- * Right panel hidden: keep it mounted (the site's scripts keep running, nothing is
- * removed) but take it out of the layout. It stays reachable through the edge
- * button, which slides it in over the page, so resign/draw/hint/next stay usable.
+ * Right panel not docked: keep it mounted (the site's scripts keep running, nothing is
+ * removed) but take it out of the layout. czm-hide-right = hidden; czm-overlay-right = shown
+ * over the page because there is no room to dock it (opened with the edge button).
  */
-html.czm-active.czm-hide-right #board-layout-sidebar {
+html.czm-active.czm-hide-right #board-layout-sidebar,
+html.czm-active.czm-overlay-right #board-layout-sidebar {
   position: fixed;
   top: 0;
   right: 0;
@@ -64,42 +65,42 @@ html.czm-active.czm-hide-right #board-layout-sidebar {
   overflow: auto;
   z-index: 2002;
   background: var(--czm-bg, #000);
+}
+html.czm-active.czm-hide-right #board-layout-sidebar {
   visibility: hidden;
   transform: translateX(100%);
-  transition: transform 0.15s ease, visibility 0s linear 0.15s;
 }
-
-html.czm-active.czm-hide-right.czm-peek #board-layout-sidebar {
-  visibility: visible;
-  transform: none;
-  transition: transform 0.15s ease, visibility 0s;
+html.czm-active.czm-overlay-right #board-layout-sidebar {
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.6);
 }
 
-/* Injected UI (removed when Zen Mode is off). */
-#czm-peek {
+/*
+ * Quick toggles for the left sidebar and right panel. Fixed to the window edges (never to
+ * the panels), so they stay put while panels open and close.
+ */
+.czm-edge {
   position: fixed;
   top: 50%;
-  right: 0;
   transform: translateY(-50%);
   width: 20px;
   height: 56px;
   padding: 0;
   border: 0;
-  border-radius: 8px 0 0 8px;
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
-  font: 700 14px/1 system-ui, sans-serif;
+  font: 700 16px/1 system-ui, sans-serif;
   cursor: pointer;
   opacity: 0.35;
   z-index: 2003;
 }
-#czm-peek:hover,
-#czm-peek:focus-visible,
-#czm-peek.czm-attention {
+.czm-edge-left { left: 0; border-radius: 0 8px 8px 0; }
+.czm-edge-right { right: 0; border-radius: 8px 0 0 8px; }
+.czm-edge:hover,
+.czm-edge:focus-visible,
+.czm-edge.czm-attention {
   opacity: 1;
 }
-#czm-peek.czm-attention {
+.czm-edge.czm-attention {
   background: #e8a33d;
   color: #111;
 }

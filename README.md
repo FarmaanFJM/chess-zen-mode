@@ -62,10 +62,10 @@ All screenshots were captured by [`scripts/screenshots.js`](scripts/screenshots.
 
 ## Features
 
-- **Centered board** – centered on the whole browser window (not the space beside a sidebar), kept square, and re-centered live when you resize the window or zoom.
+- **Centered board** – centered on the whole browser window (not the space beside a sidebar), kept square, and re-centered live when you resize the window, zoom or go full screen. In a taller window (full screen) the board is also centered vertically.
 - **Distractions hidden** – the left navigation, the right-hand panel and ads are hidden. You can bring either panel back from the popup; the board stays centered when there is room.
 - **Native board resizing** – Chess.com's own resize handle (bottom-right corner of the board) keeps working. The extension never sets a board size and never touches the size you saved on Chess.com.
-- **Still reachable** – a hidden panel is not removed. A small tab on the right edge slides it back over the page, so resign, draw offers, hints and the engine toggle are always one click away.
+- **Quick toggles** – two small tabs fixed to the left and right edges of the window show or hide the left sidebar and the right panel without opening the popup. They are the same switches as in the popup (saved, and kept in sync with it and with other tabs), and they never move when a panel opens or closes. The arrow shows what a click will do. If a shown panel doesn't fit next to the board in a small window, it stays closed and the tab opens it as an overlay (`Esc` or a click elsewhere closes it), so resign, draw offers, hints and the engine toggle are always one click away.
 - **Four independent modes** – each remembers its own on/off state and panel choices.
 - **Persistent settings** – saved in browser extension storage, restored on the next visit and shared by all open Chess.com tabs. The layout is applied as the page loads, so it doesn't flash the original layout first.
 - **Background color** – pure black by default; pick any color. Only the page background changes.
@@ -75,7 +75,7 @@ All screenshots were captured by [`scripts/screenshots.js`](scripts/screenshots.
 
 | Mode | Pages | Notes |
 | --- | --- | --- |
-| **Online Chess** | `/play/online…`, `/game/live/<id>` | Live games against other players |
+| **Online Chess** | `/play/online…`, `/game/<id>`, `/game/live/<id>` | Live games against other players |
 | **Daily Chess** | `/game/daily/<id>` | Same layout as Online |
 | **Puzzles** | `/puzzles`, `/puzzles/rated`, `/puzzles/rush`, `/puzzles/battle`, `/puzzles/problem/…`, `/puzzles/daily`, `/puzzles/learning`, `/puzzles/custom` | Optional compact stats panel (read from Chess.com's own sidebar) |
 | **Analysis Board** | `/analysis…` | Chess.com's analysis panel, engine toggle and lines stay visible by default |
@@ -114,7 +114,7 @@ To run straight from source, clone this repository and choose the repository roo
 1. Open a supported Chess.com page.
 2. Click the extension icon and switch on the Zen Mode for that page type (Online, Daily, Puzzle or Analysis).
 3. To get the normal Chess.com layout back, switch it off. Your game, puzzle or analysis keeps running; nothing reloads.
-4. Use the other switches to bring back the left sidebar or the right panel, or the edge tab to peek at a hidden panel (`Esc` or a click elsewhere closes it).
+4. Use the other switches to bring back the left sidebar or the right panel, or the quick toggles at the window edges.
 
 You can turn on all four modes at once; each tab only follows the mode that matches its page.
 
@@ -140,14 +140,14 @@ These statements are checked by automated tests of the source (no network or eng
 
 ## Known limitations and what still needs manual testing
 
-Automated browser tests (160 executed checks passing, 1 skipped) ran only against logged-out guest pages, including the live Analysis Board with its Stockfish panel. These still need a human with an account:
+Automated browser tests (173 executed checks passing, 1 skipped) ran only against logged-out guest pages, including the live Analysis Board with its Stockfish panel. These still need a human with an account:
 
 - **Authenticated Online games** – ticking clocks, premoves, arrows, resign and draw offers.
-- **Daily Chess** – only the guest page shell was available. Piece alignment (the one skipped test), move confirmation, conditional moves, remaining time and game actions are untested. The tab on the right edge turns amber when an offer/confirm/submit element appears in a hidden panel; this is a class-name heuristic.
+- **Daily Chess** – only the guest page shell was available. Piece alignment (the one skipped test), move confirmation, conditional moves, remaining time and game actions are untested. The right quick toggle turns amber when an offer/confirm/submit element appears in a hidden panel; this is a class-name heuristic.
 - **Puzzle Rush Survival and timed Puzzle Rush (3/5 min)** – the compact stats read Chess.com's own sidebar using class names taken from its stylesheet; they are unverified, and the panel says "No stats available here" instead of guessing. It shows a single *Time* value as displayed by Chess.com.
 - Real browser zoom (smaller windows were tested instead), Edge/Brave, theatre mode and the two-board Puzzle Battle layout.
 
-Other limits: the desktop layout only (window at least 960 px wide; below that Chess.com's mobile layout is left alone); the board is centered unless a shown panel plus the board don't fit, in which case the panel moves to the edge tab; `/play/computer` and the Daily Puzzle are out of scope. Chess.com can change its pages at any time; if an element the extension relies on disappears, it does nothing rather than breaking the page.
+Other limits: the desktop layout only (window at least 960 px wide; below that Chess.com's mobile layout is left alone); the board is centered unless a shown panel plus the board don't fit, in which case the panel stays closed until you open it from its quick toggle; `/play/computer` and the Daily Puzzle are out of scope. Chess.com can change its pages at any time; if an element the extension relies on disappears, it does nothing rather than breaking the page.
 
 The full results are in [docs/TEST_REPORT_v0.1.0.md](docs/TEST_REPORT_v0.1.0.md) and the draft [release notes](docs/RELEASE_NOTES_v0.1.0.md).
 

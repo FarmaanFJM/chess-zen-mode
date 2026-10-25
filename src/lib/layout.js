@@ -63,9 +63,21 @@
     return clamp(desired, minLeft, upper) - boardLeft;
   }
 
+  /**
+   * Downward correction (px, never negative) that centers the board block vertically when the
+   * window is taller than it (full screen, tall windows). `top` is the block's natural top.
+   * When there is no spare room it returns 0 and the site's own top-aligned layout is kept.
+   */
+  function computeVerticalShift(opts) {
+    const margin = opts.margin == null ? 16 : opts.margin;
+    const free = opts.vh - opts.height;
+    if (free <= margin * 2) return 0;
+    return Math.max(0, free / 2 - opts.top);
+  }
+
   const api = {
     MIN_VIEWPORT_WIDTH, NAV_WIDTH, PANEL_PREFERRED, PANEL_MIN, BOARD_SLACK, panelSize,
-    computeReserves, computeShift,
+    computeReserves, computeShift, computeVerticalShift,
   };
   root.ChessZen = Object.assign(root.ChessZen || {}, { layout: api });
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
