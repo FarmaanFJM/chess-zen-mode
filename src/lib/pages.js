@@ -2,9 +2,16 @@
 (function (root) {
   'use strict';
 
-  // Live human games. /game/live/<id> also serves a game after it ends; the
-  // separate review UI lives under /analysis/... and is intentionally not matched.
+  // Live human games. /game/live/<id> also serves a game after it ends.
   const ONLINE = [/^\/play\/online(\/.*)?$/, /^\/game\/live\/\d+\/?$/];
+
+  // Daily (correspondence) games. Note: /daily is the Daily *Puzzle*, not Daily Chess.
+  const DAILY = [/^\/game\/daily\/\d+\/?$/];
+
+  // Analysis-only interfaces: the standalone board and post-game analysis/review.
+  // Strictly disjoint from the game routes above, so engine-bearing analysis UI is
+  // never combined with an active Online/Daily game page.
+  const ANALYSIS = [/^\/analysis(\/.*)?$/];
 
   // Board-based puzzle pages. Non-board puzzle pages (leaderboards, stats...) are
   // not listed; the content script additionally requires a board element.
@@ -25,11 +32,13 @@
     }
   }
 
-  /** @returns {'online'|'puzzle'|null} */
+  /** @returns {'online'|'daily'|'puzzle'|'analysis'|null} */
   function detectPage(url) {
     const path = pathOf(url);
     if (path === null) return null;
     if (ONLINE.some((re) => re.test(path))) return 'online';
+    if (DAILY.some((re) => re.test(path))) return 'daily';
+    if (ANALYSIS.some((re) => re.test(path))) return 'analysis';
     if (PUZZLE.some((re) => re.test(path))) return 'puzzle';
     return null;
   }

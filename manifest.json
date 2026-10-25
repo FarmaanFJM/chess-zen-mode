@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Chess Zen Mode",
   "version": "0.1.0",
-  "description": "Center the board and hide distractions on Chess.com online games and puzzles. Visual focus tool only.",
+  "description": "Center the board and hide distractions on Chess.com online games, Daily games, puzzles and the analysis board. Visual focus tool only.",
   "minimum_chrome_version": "105",
   "permissions": ["storage"],
   "host_permissions": ["https://www.chess.com/*"],
@@ -17,7 +17,7 @@
         "src/content/content.js"
       ],
       "css": ["src/content/zen.css"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "action": {
