@@ -70,7 +70,9 @@ async function open(ctx, url, vp) {
   await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await p.waitForSelector(BOARD, { timeout: 30000 });
   await p.waitForTimeout(1500);
-  await p.evaluate(() => { document.querySelector('[class*="modal"] button')?.click?.(); }).catch(() => {});
+  // Guests get an intro modal on puzzle pages that blocks hover/clicks on the board area.
+  await p.click('button:has-text("Ok")', { timeout: 1500 }).catch(() => {});
+  await p.waitForTimeout(500);
   return p;
 }
 
@@ -94,6 +96,49 @@ const geom = (p) => p.evaluate((sel) => {
     docH: document.documentElement.scrollHeight,
   };
 }, BOARD);
+
+
+// ---- Native board-resize helpers (Chess.com's own drag handle in #board-layout-controls) ----
+const boardW = (p) => p.evaluate((sel) => document.querySelector(sel).getBoundingClientRect().width, BOARD);
+
+async function dragResize(p, dx) {
+  const c = await p.evaluate((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return { x: r.right + 16, y: r.bottom - 12 }; }, BOARD);
+  await p.mouse.move(c.x, c.y); // hover the controls column so the site reveals the handle
+  await p.waitForTimeout(200);
+  const h = await p.evaluate(() => { const e = document.querySelector('#board-layout-controls .resize'); if (!e) return null; const r = e.getBoundingClientRect(); return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null; });
+  if (!h) throw new Error('native resize handle not available');
+  await p.mouse.move(h.x, h.y);
+  await p.mouse.down();
+  const steps = 12;
+  for (let i = 1; i <= steps; i++) { await p.mouse.move(h.x + (dx * i) / steps, h.y); await p.waitForTimeout(16); }
+  await p.mouse.up();
+  await p.waitForTimeout(500);
+}
+
+// Pieces sit on the board grid, overlays stay inside the board, board is square.
+async function alignment(p) {
+  const info = await p.evaluate((sel) => {
+    const b = document.querySelector(sel).getBoundingClientRect();
+    const sq = b.width / 8;
+    const worst = Math.max(0, ...[...document.querySelectorAll(`${sel} .piece`)].map((el) => {
+      const m = /square-(\d)(\d)/.exec(el.className); const r = el.getBoundingClientRect();
+      const f = +m[1] - 1, rk = +m[2] - 1;
+      return Math.min(Math.hypot(r.left - (b.left + f * sq), r.top - (b.top + (7 - rk) * sq)), Math.hypot(r.left - (b.left + (7 - f) * sq), r.top - (b.top + rk * sq)));
+    }));
+    const sizes = [...document.querySelectorAll(`${sel} .piece`)].map((el) => Math.abs(el.getBoundingClientRect().width - sq));
+    return { w: b.width, h: b.height, worst, sizeOff: Math.max(0, ...sizes) };
+  }, BOARD);
+  ok(Math.abs(info.w - info.h) <= 1.5, `not square: ${info.w}x${info.h}`);
+  ok(info.worst < 1.5, `pieces off-grid by ${info.worst.toFixed(2)}px`);
+  ok(info.sizeOff < 1.5, `piece size mismatch ${info.sizeOff.toFixed(2)}px`);
+  const t = await p.evaluate((sel) => { const el = [...document.querySelectorAll(`${sel} .piece`)].find((e) => /\bw[pqrnbk]\b/.test(e.className)); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, BOARD);
+  await p.mouse.click(t.x, t.y);
+  await p.waitForTimeout(400);
+  const out = await p.evaluate((sel) => { const b = document.querySelector(sel).getBoundingClientRect(); return [...document.querySelectorAll(`${sel} .highlight, ${sel} .hint, ${sel} .capture-hint`)].filter((e) => { const r = e.getBoundingClientRect(); return r.left < b.left - 1 || r.right > b.right + 1 || r.top < b.top - 1 || r.bottom > b.bottom + 1; }).length; }, BOARD);
+  ok(out === 0, `${out} overlay elements outside the board`);
+  await p.mouse.click(5, 5).catch(() => {});
+}
+const savedSize = (p) => p.evaluate(() => { try { return localStorage.getItem('json_settings'); } catch (e) { return null; } });
 
 async function waitSettled(p) { await p.waitForTimeout(500); }
 
@@ -350,6 +395,107 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     await setSettings(helper, S());
     await p.close();
   });
+
+
+  // ---- Native board resizing must keep working: before, during and after Zen Mode ----
+  for (const [key, url] of pageSets) {
+    const kind = key === 'online' ? 'online' : 'puzzle';
+    await setSettings(helper, S());
+    const p = await open(ctx, url, { width: 1500, height: 900 });
+    await p.evaluate(() => localStorage.clear());
+    await p.reload({ waitUntil: 'domcontentloaded' });
+    await p.waitForSelector(BOARD); await p.waitForTimeout(1500);
+    await p.click('button:has-text("Ok")', { timeout: 1500 }).catch(() => {}); // guest intro modal returns after clearing storage
+    await p.waitForTimeout(500);
+    const cx = async () => { const g = await geom(p); return (g.board.l + g.board.r) / 2 - g.vw / 2; };
+    let w0, w1, w2, w3, w4;
+
+    await check(`[${key}] resize works natively BEFORE Zen Mode (control: no extension effect)`, async () => {
+      w0 = await boardW(p);
+      await dragResize(p, -120);
+      w1 = await boardW(p);
+      ok(Math.abs(w0 - w1 - 120) <= 10, `expected ~-120, got ${(w1 - w0).toFixed(1)}`);
+      await alignment(p);
+    });
+
+    await setSettings(helper, S({ [kind]: { enabled: true } }));
+    await waitSettled(p);
+    await check(`[${key}] enabling Zen keeps the user's chosen size and centers it`, async () => {
+      w2 = await boardW(p);
+      ok(Math.abs(w2 - w1) <= 8, `size changed by Zen: ${w1} -> ${w2}`);
+      near(await cx(), 0, 2, 'center offset');
+      await alignment(p);
+    });
+
+    await check(`[${key}] resize works WHILE Zen is on: shrink, stays centered, aligned`, async () => {
+      await dragResize(p, -100);
+      w3 = await boardW(p);
+      ok(Math.abs(w2 - w3 - 100) <= 10, `expected ~-100, got ${(w3 - w2).toFixed(1)}`);
+      near(await cx(), 0, 2, 'center offset after shrink');
+      await alignment(p);
+    });
+    await check(`[${key}] resize works WHILE Zen is on: grow, stays centered, aligned`, async () => {
+      await dragResize(p, 60);
+      w4 = await boardW(p);
+      ok(Math.abs(w4 - w3 - 60) <= 10, `expected ~+60, got ${(w4 - w3).toFixed(1)}`);
+      near(await cx(), 0, 2, 'center offset after grow');
+      await alignment(p);
+    });
+    await check(`[${key}] size persists through panel toggles and resize still works`, async () => {
+      await setSettings(helper, S({ [kind]: { enabled: true, showLeft: true, showRight: true } }));
+      await waitSettled(p);
+      ok((await boardW(p)) <= w4 + 1, 'board must not grow beyond the user size');
+      const before = await boardW(p);
+      await dragResize(p, -40);
+      ok((await boardW(p)) < before - 20, 'resize did nothing with panels shown');
+      near(await cx(), 0, 3, 'center offset');
+      await alignment(p);
+      await setSettings(helper, S({ [kind]: { enabled: true } }));
+      await waitSettled(p);
+      near(await cx(), 0, 2, 'center offset after hiding panels');
+    });
+    await check(`[${key}] window resize + zoom-equivalent keep the user size (when it fits) and the center`, async () => {
+      const before = await boardW(p);
+      await p.setViewportSize({ width: 1700, height: 900 }); await p.waitForTimeout(400);
+      ok(Math.abs((await boardW(p)) - before) <= 8, 'size changed by widening the window');
+      near(await cx(), 0, 2, 'center after widen');
+      await p.setViewportSize({ width: 1100, height: 700 }); await p.waitForTimeout(400);
+      near(await cx(), 0, 2, 'center after shrink');
+      await alignment(p);
+      await p.setViewportSize({ width: 1500, height: 900 }); await p.waitForTimeout(400);
+    });
+    await check(`[${key}] Zen never writes board size itself (no inline width/--modifiedBoardWidth from the extension)`, async () => {
+      const before = await p.evaluate(() => document.body.style.getPropertyValue('--modifiedBoardWidth'));
+      await setSettings(helper, S()); await waitSettled(p);
+      await setSettings(helper, S({ [kind]: { enabled: true } })); await waitSettled(p);
+      const after = await p.evaluate(() => document.body.style.getPropertyValue('--modifiedBoardWidth'));
+      ok(before === after, `--modifiedBoardWidth changed by toggling: ${before} -> ${after}`);
+      const boardStyle = await p.evaluate((sel) => document.querySelector(sel).getAttribute('style') || '', BOARD);
+      ok(!/czm/.test(boardStyle), 'extension touched the board element style');
+    });
+
+    await setSettings(helper, S());
+    await waitSettled(p);
+    await check(`[${key}] after disabling Zen, native resize still works and layout is the original`, async () => {
+      const g = await geom(p);
+      ok(!g.cls.includes('czm-') && g.navVisible && g.sideVisible, 'original layout not restored');
+      const before = await boardW(p);
+      await dragResize(p, -50);
+      const after = await boardW(p);
+      ok(Math.abs(before - after - 50) <= 10, `expected ~-50, got ${(after - before).toFixed(1)}`);
+      await alignment(p);
+    });
+    await check(`[${key}] size chosen in Zen is remembered when Zen is switched back on`, async () => {
+      await setSettings(helper, S({ [kind]: { enabled: true } })); await waitSettled(p);
+      const w = await boardW(p);
+      near(await cx(), 0, 2, 'center');
+      ok(w > 100 && Math.abs(w - (await boardW(p))) < 1, 'unstable');
+      await setSettings(helper, S()); await waitSettled(p);
+    });
+    await p.evaluate(() => localStorage.clear());
+    ok(p.errors.length === 0, p.errors.join('|'));
+    await p.close();
+  }
 
   // ---- Scope, navigation, tabs, popup, persistence ----
   await check('out-of-scope pages are untouched even with both modes on', async () => {
