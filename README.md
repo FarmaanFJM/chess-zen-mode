@@ -1,140 +1,180 @@
 # Chess Zen Mode
 
-A small Chromium extension that makes [Chess.com](https://www.chess.com) more focused: it **centers the board in your browser window and hides the distractions around it**, then puts everything back with one toggle.
+**Center the board. Hide the noise. Play and analyze Chess.com with nothing else on screen.**
 
-It is a visual focus tool only. It does not replace Chess.com's board, pieces, move handling, clocks or game logic, and it never analyzes positions, suggests moves, automates play or sends data anywhere.
+Chess Zen Mode is a small Chrome/Chromium extension that centers the Chess.com chessboard in your browser window and hides the navigation sidebar, side panel and ads around it. One toggle turns it on, another restores the normal site, without reloading the page or interrupting a game.
 
-> **Status: v0.1.0 prototype.** Verified against Chess.com's real page structure as a logged-out guest (including the real Analysis Board and its Stockfish panel); logged-in live games, Daily games and Puzzle Rush still need a human check. See [Known limitations](#known-limitations) and [Testing](#testing).
+> **Status: v0.1.0 prototype – not released yet.** Nothing has been published on the [Releases page](https://github.com/FarmaanFJM/chess-zen-mode/releases) so far; when v0.1.0 appears there it will be marked as a pre-release. It has been tested automatically on logged-out guest pages only. See [Known limitations](#known-limitations-and-what-still-needs-manual-testing).
 
-## What it does
+## Before and after
 
-| Mode | Pages | Zen Mode ON | Zen Mode OFF |
-| --- | --- | --- | --- |
-| **Online Zen Mode** | `/play/online…`, `/game/live/<id>` | Board centered on the viewport; left navigation, right panel, ads hidden; background colour applied | Normal Chess.com |
-| **Daily Zen Mode** | `/game/daily/<id>` | Same as Online | Normal Chess.com |
-| **Puzzle Zen Mode** | `/puzzles`, `/puzzles/rated`, `/puzzles/rush`, `/puzzles/battle`, `/puzzles/problem/…`, `/puzzles/daily`, `/puzzles/learning`, `/puzzles/custom` | Same as above, plus an optional compact stats panel | Normal Chess.com |
-| **Analysis Zen Mode** | `/analysis` and everything under it (standalone board, post-game analysis/review) | Board centered, left navigation hidden, **Chess.com's own analysis panel stays visible** (engine toggle, evaluation, lines, move list, controls) | Normal Chess.com |
+Online Chess (the same page, window size and moment; guest view before a game starts):
 
-Page types are strictly separate: a game page (`/play/online`, `/game/live/…`, `/game/daily/…`) can only ever get its own game mode, and `/analysis…` can only ever get Analysis Zen Mode. `/daily` is the Daily *Puzzle*, not Daily Chess, and is not touched.
+<table>
+  <tr>
+    <th>Original Chess.com</th>
+    <th>Zen Mode</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/online-before.png" alt="Chess.com online play page with the board on the left, the navigation sidebar on the left edge and the new-game panel and an ad on the right" width="480"></td>
+    <td><img src="docs/screenshots/online-zen.png" alt="The same page in Zen Mode: board horizontally centered on a black background with both players' clocks, and the sidebar, panel and ad hidden" width="480"></td>
+  </tr>
+</table>
 
-Every other Chess.com page (home, news, articles, lessons, game review, analysis, openings, settings, …) is left completely untouched. Page detection is an explicit URL allow-list, and a board element must be present before anything is applied.
+The board, pieces, theme, coordinates and clocks are Chess.com's own; only the space around them changes.
+
+<details>
+<summary>Puzzles and Analysis Board</summary>
+
+**Puzzles**
+
+<table>
+  <tr>
+    <th>Original Chess.com</th>
+    <th>Puzzle Zen Mode</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/puzzles-before.png" alt="Chess.com puzzle page with the board, the navigation sidebar, the puzzle panel and an ad" width="480"></td>
+    <td><img src="docs/screenshots/puzzles-zen.png" alt="The same puzzle in Zen Mode with the board centered on a black background" width="480"></td>
+  </tr>
+</table>
+
+**Analysis Board** – Chess.com's own engine toggle, evaluation bar, engine lines, move list and controls stay visible beside the centered board.
+
+<table>
+  <tr>
+    <th>Original Chess.com</th>
+    <th>Analysis Zen Mode</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/analysis-before.png" alt="Chess.com analysis board with the navigation sidebar and the analysis panel showing Stockfish engine lines" width="480"></td>
+    <td><img src="docs/screenshots/analysis-zen.png" alt="The same analysis board in Zen Mode: centered board, evaluation bar, and Chess.com's analysis panel with the engine toggle and three engine lines on the right" width="480"></td>
+  </tr>
+</table>
+
+All screenshots were captured by [`scripts/screenshots.js`](scripts/screenshots.js) from the real extension running in Chromium on logged-out Chess.com guest pages at 1600×900. Online Chess shows the guest pre-game board. **Daily Chess screenshots are pending manual capture:** a guest only sees a placeholder page for Daily games.
+
+</details>
 
 ## Features
 
-- **Centered board** – centered on the *viewport* (not on the space beside a sidebar), square, and sized by Chess.com's own layout rules so it fits the window height. Re-centers live on resize and zoom.
-- **Original board untouched** – themes, pieces, coordinates, drag/click moves, premoves, arrows, highlights, promotion and clocks are all Chess.com's own. The extension only changes the page's layout variables, so overlays stay aligned with the board.
-- **Independent panel toggles** – show/hide the left sidebar and the right panel separately while staying in Zen Mode. A visible right panel is mirrored by empty space on the left so the board stays centered. If the window is too narrow, the board wins and the panel falls back to the drawer (below).
-- **Native board resizing preserved** – Chess.com's own resize handle (bottom-right of the board, appears on hover) works before, during and after Zen Mode. The extension never sets a board width/height or `--modifiedBoardWidth`; it only changes the space *around* the board, and re-centers whenever the board's size changes. Your saved size is Chess.com's own preference and is left alone, so it carries across Zen on/off. Because the board grows around its center, the handle moves at half the speed of your cursor while dragging (the size still follows the cursor 1:1).
-- **Always-reachable controls** – a hidden right panel is not removed. A small tab on the right edge of the window slides it back over the page (resign, draw offers, hint, next puzzle…). `Esc` or clicking elsewhere closes it. In online games the tab turns amber when a draw/offer element appears in the hidden panel.
-- **Analysis keeps Chess.com's engine** – Analysis Zen Mode only moves and resizes Chess.com's own analysis panel. The engine toggle, evaluation bar, depth/engine line, continuation lines, multi-line settings, move list and navigation buttons are the site's own, untouched and visible by default. The extension never starts, stops or configures the engine (a disabled engine stays disabled), never runs or ships an engine, and never computes or injects evaluations. On narrow windows (or if you hide it) the panel collapses to the edge drawer, where the engine toggle and lines stay one click away.
-- **Fair play** – there is no engine code in the extension, and page modes are disjoint by URL, so Analysis Zen Mode is never applied to an Online or Daily game page and engine information is never added to a game.
-- **Settings persist** – every toggle, every sidebar/panel preference and the background colour are saved in extension storage and restored on the next visit, in any tab, with each mode remembering its own state. Settings changes appear live in all open Chess.com tabs. Zen layout is applied at `document_start` from a synchronous copy of the last settings, so the page doesn't flash its original layout first.
-- **Puzzle stats (optional)** – a compact panel next to the board that *copies* values from Chess.com's own sidebar (never its own timer). Rows only appear when the source element exists and has the expected format; otherwise it says *No stats available here*.
-- **Background colour** – pure black by default, any `#rrggbb` via the colour picker; saved between sessions. Only the page background changes.
-- **Fully reversible** – turning a mode off removes every class, CSS variable, inline style and injected element. No reload, no reconnect, no game or puzzle/timer reset.
+- **Centered board** – centered on the whole browser window (not the space beside a sidebar), kept square, and re-centered live when you resize the window or zoom.
+- **Distractions hidden** – the left navigation, the right-hand panel and ads are hidden. You can bring either panel back from the popup; the board stays centered when there is room.
+- **Native board resizing** – Chess.com's own resize handle (bottom-right corner of the board) keeps working. The extension never sets a board size and never touches the size you saved on Chess.com.
+- **Still reachable** – a hidden panel is not removed. A small tab on the right edge slides it back over the page, so resign, draw offers, hints and the engine toggle are always one click away.
+- **Four independent modes** – each remembers its own on/off state and panel choices.
+- **Persistent settings** – saved in browser extension storage, restored on the next visit and shared by all open Chess.com tabs. The layout is applied as the page loads, so it doesn't flash the original layout first.
+- **Background color** – pure black by default; pick any color. Only the page background changes.
+- **Fully reversible** – turning a mode off removes everything the extension added.
 
-## Supported browsers
+### Supported modes
 
-Chrome and other Chromium browsers that support Manifest V3 (Chrome/Edge/Brave/Opera… 105+). Firefox and Safari are not supported.
+| Mode | Pages | Notes |
+| --- | --- | --- |
+| **Online Chess** | `/play/online…`, `/game/live/<id>` | Live games against other players |
+| **Daily Chess** | `/game/daily/<id>` | Same layout as Online |
+| **Puzzles** | `/puzzles`, `/puzzles/rated`, `/puzzles/rush`, `/puzzles/battle`, `/puzzles/problem/…`, `/puzzles/daily`, `/puzzles/learning`, `/puzzles/custom` | Optional compact stats panel (read from Chess.com's own sidebar) |
+| **Analysis Board** | `/analysis…` | Chess.com's analysis panel, engine toggle and lines stay visible by default |
+
+Every other Chess.com page (home, news, lessons, the Daily Puzzle at `/daily`, settings, …) is never touched. Game pages and the analysis board are strictly separate: only the mode for the current page type can activate.
+
+## The extension popup
+
+<img src="docs/screenshots/extension-popup.png" alt="The extension popup with sections for Online Chess, Daily Chess, Puzzles, Analysis Board and Appearance, each with a Zen Mode switch and sidebar/panel switches, plus a background color picker" width="310">
+
+Each section has its own **Zen Mode** switch plus **Show Left Sidebar** and **Show Right Panel** switches (Analysis: **Show Analysis Panel**). Puzzles also has **Show Puzzle Stats**. Changes apply immediately to open Chess.com tabs. The screenshot shows Online, Puzzle and Analysis switched on.
+
+| Setting | Default |
+| --- | --- |
+| Zen Mode (each of the four modes) | Off |
+| Show Left Sidebar / Show Right Panel | Off |
+| Show Analysis Panel | **On** (it holds the engine controls) |
+| Show Puzzle Stats | Off |
+| Background Color | `#000000` |
 
 ## Installation
 
-1. Download `chess-zen-mode-v0.1.0.zip` from the GitHub release and **extract it** to a folder you will keep (the extension runs from that folder).
-2. Open `chrome://extensions`.
-3. Turn on **Developer mode** (top right).
-4. Click **Load unpacked**.
-5. Choose the extracted folder (the one that directly contains `manifest.json`).
-6. Optional: pin the extension from the puzzle-piece menu in the toolbar.
+Chess Zen Mode is not on the Chrome Web Store. Install it from the release ZIP:
 
-To install from source instead, clone this repository and choose the repository root in step 5.
+1. Download `chess-zen-mode-v0.1.0.zip` from the [Releases page](https://github.com/FarmaanFJM/chess-zen-mode/releases) once v0.1.0 is published there. *(Until then, build it yourself, see [Development](#development), or load the repository folder directly as in the note below.)*
+2. **Extract** the ZIP to a folder you will keep; Chrome runs the extension from that folder. `manifest.json` is directly inside it.
+3. Open `chrome://extensions`.
+4. Turn on **Developer mode** (top right).
+5. Click **Load unpacked** and choose the extracted folder.
+6. Reload any open Chess.com tabs.
 
-Reload any open Chess.com tabs once after installing.
+To run straight from source, clone this repository and choose the repository root in step 5.
 
-## Using it
+## Usage
 
 1. Open a supported Chess.com page.
-2. Click the extension icon.
-3. Switch on the mode for the page you are on: **Online**, **Daily Chess**, **Puzzle** or **Analysis** Zen Mode. The change applies immediately to open tabs.
-4. Switch it off again to return to the normal Chess.com layout.
+2. Click the extension icon and switch on the Zen Mode for that page type (Online, Daily, Puzzle or Analysis).
+3. To get the normal Chess.com layout back, switch it off. Your game, puzzle or analysis keeps running; nothing reloads.
+4. Use the other switches to bring back the left sidebar or the right panel, or the edge tab to peek at a hidden panel (`Esc` or a click elsewhere closes it).
 
-All modes can be enabled at once; only the one that matches the current page activates, and each tab follows its own page.
+You can turn on all four modes at once; each tab only follows the mode that matches its page.
 
-### Settings
+## How it works
 
-| Section | Setting | Default | Effect |
-| --- | --- | --- | --- |
-| Online Chess | Online Zen Mode | Off | Master switch for live games |
-| | Show Left Sidebar | Off | Keep Chess.com's navigation visible inside Zen Mode |
-| | Show Right Panel | Off | Keep the move list/chat/game panel docked inside Zen Mode |
-| Daily Chess | Daily Chess Zen Mode | Off | Master switch for Daily games |
-| | Show Left Sidebar / Show Right Panel | Off | As above |
-| Puzzles | Puzzle Zen Mode | Off | Master switch for puzzles |
-| | Show Left Sidebar / Show Right Panel | Off | As above |
-| | Show Puzzle Stats | Off | Compact stats panel; turning it off does not end Zen Mode |
-| Analysis Board | Analysis Zen Mode | Off | Master switch for the analysis board |
-| | Show Left Sidebar | Off | As above |
-| | Show Analysis Panel | **On** | Chess.com's engine/analysis panel. Off = edge drawer |
-| Appearance | Background Color | `#000000` | Zen Mode page background; **Default** resets to black |
+Chess Zen Mode does not replace the chessboard or implement any chess logic. Chess.com lays out its play, puzzle and analysis pages as a CSS grid on `<body>` controlled by variables such as the navigation and panel widths. The extension overrides those variables, so Chess.com's own code still sizes the board, and then makes a small measured correction so the board's center lands on the window's center. Pieces, overlays, arrows, clocks, drag and drop and the resize handle are all the original elements, untouched.
 
-Settings are stored with `chrome.storage.local` (this browser only, never synced or sent anywhere). For flash-free loading the content script also keeps a copy of the toggles and colour in Chess.com's page `localStorage` (key `czm:last`); extension storage remains the source of truth.
+## Privacy and fair play
 
-### Permissions and privacy
+These statements are checked by automated tests of the source (no network or engine code, narrow permissions) and by the implementation:
 
-- `storage` – to remember the settings above.
-- Host access `https://www.chess.com/*` – to run the content script. Nothing else.
-- No network requests, analytics, remote code, or access to credentials or game data. The stats panel reads only text already shown on the page.
+- **No analysis or assistance.** The extension contains no chess engine and no move or position analysis, and never suggests, plays or automates moves. In Analysis Zen Mode the engine panel is Chess.com's own: the extension never starts, stops or configures the engine, and a disabled engine stays disabled.
+- **No engine information in games.** Online and Daily game pages can only ever get their game mode, and `/analysis…` pages can only ever get Analysis Zen Mode.
+- **No data leaves your browser.** There are no network requests, analytics, remote code or accounts. The only permissions are `storage` and access to `https://www.chess.com/*`.
+- **What is stored.** Your switches and background color in the extension's local storage. For flash-free loading a copy of them (key `czm:last`) is also kept in Chess.com's page storage, so Chess.com's own scripts could technically read those on/off values and the color. Nothing else is stored.
+- **Puzzle stats** only copy text already shown on the page.
 
-## Known limitations
+## Compatibility
 
-- **Daily Chess is verified only against the guest page shell.** A guest cannot open a real Daily game (Chess.com serves the play layout with placeholder content), so centering/panels are tested there but piece alignment, move confirmation, conditional moves, clocks and resign/draw were not seen. They live in the right panel and the edge drawer; the tab turns amber when an offer/confirm/submit element appears in the hidden panel (a class-name heuristic).
-- **Not yet verified on a live game or a logged-in Puzzle Rush.** Guest pages exposed the real layout (used for testing), but no guest can play a live human game or Rush. The stats selectors are derived from class names in Chess.com's shipped puzzle stylesheet and are **unverified** for Rush/Survival/Battle; if they don't match, the panel shows *No stats available here* rather than guessing. Please report what you see.
-- Stats show a single **Time** value as displayed by Chess.com; the extension does not distinguish elapsed (Survival) from remaining (timed) time.
-- Desktop layout only: below 960 CSS px of window width Chess.com switches to its mobile layout and Zen Mode does nothing (the popup says so).
-- When a right panel is shown but the window is too small for panel + board, the panel moves to the edge drawer.
-- `/play/computer`, bots and the Daily Puzzle (`/daily`) are out of scope by design. A finished game left open at `/game/live/<id>` or `/game/daily/<id>` still uses the play layout, so Zen Mode applies there.
-- The draw-offer indicator is a best-effort heuristic on class names; always check the drawer if you expect an offer.
-- Chess.com changes its markup from time to time. Layout relies on the site's own CSS variables and a handful of stable IDs (`#board-layout-main`, `#board-layout-sidebar`, `#sidebar-main-menu`, `wc-chess-board`); if one disappears the extension does nothing instead of breaking the page.
-- Theatre mode, double-board puzzle battles and the events/tournament layout are untested.
+- **Tested:** Chromium (Playwright build) on Linux, desktop layout.
+- **Expected to work, not tested:** Google Chrome and other Chromium-based browsers with Manifest V3 support (Chrome 105 or newer), including Edge and Brave.
+- **Not supported:** Firefox and Safari.
+
+## Known limitations and what still needs manual testing
+
+Automated browser tests (160 executed checks passing, 1 skipped) ran only against logged-out guest pages, including the live Analysis Board with its Stockfish panel. These still need a human with an account:
+
+- **Authenticated Online games** – ticking clocks, premoves, arrows, resign and draw offers.
+- **Daily Chess** – only the guest page shell was available. Piece alignment (the one skipped test), move confirmation, conditional moves, remaining time and game actions are untested. The tab on the right edge turns amber when an offer/confirm/submit element appears in a hidden panel; this is a class-name heuristic.
+- **Puzzle Rush Survival and timed Puzzle Rush (3/5 min)** – the compact stats read Chess.com's own sidebar using class names taken from its stylesheet; they are unverified, and the panel says "No stats available here" instead of guessing. It shows a single *Time* value as displayed by Chess.com.
+- Real browser zoom (smaller windows were tested instead), Edge/Brave, theatre mode and the two-board Puzzle Battle layout.
+
+Other limits: the desktop layout only (window at least 960 px wide; below that Chess.com's mobile layout is left alone); the board is centered unless a shown panel plus the board don't fit, in which case the panel moves to the edge tab; `/play/computer` and the Daily Puzzle are out of scope. Chess.com can change its pages at any time; if an element the extension relies on disappears, it does nothing rather than breaking the page.
+
+The full results are in [docs/TEST_REPORT_v0.1.0.md](docs/TEST_REPORT_v0.1.0.md) and the draft [release notes](docs/RELEASE_NOTES_v0.1.0.md).
 
 ## Development
 
-No build step and no runtime dependencies – the repository root *is* the extension.
+No build step and no runtime dependencies: the repository root is the extension. Requires Node 18+.
 
-```
-manifest.json            MV3 manifest
-src/lib/settings.js      settings schema, validation, storage helpers (shared)
-src/lib/pages.js         URL allow-list / page-type detection (online, daily, puzzle, analysis)
-src/lib/layout.js        pure layout math (panel reserves, centering correction)
-src/lib/stats.js         read-only puzzle stats extraction
-src/content/content.js   content script: applies/removes Zen Mode
-src/content/zen.css      layout overrides, all scoped under html.czm-active
+```text
+manifest.json            Manifest V3
+src/lib/                 settings, page detection, layout math, puzzle stats reader
+src/content/             content script and zen.css (everything scoped to html.czm-active)
 src/popup/               popup UI
 test/unit/               node:test unit tests
 test/e2e/run.js          Playwright browser tests (live Chess.com guest pages)
-scripts/                 validate.js, package.js
+scripts/                 validate.js, package.js, screenshots.js
+docs/                    release notes, test report, screenshots
 ```
-
-How it works: Chess.com lays out play and puzzle pages as a CSS grid on `<body>` driven by variables (`--verticalNavWidth`, `--sidebarMinWidth`, …). Zen Mode overrides those variables (so the site's own sizing still runs), then corrects any residual offset by measuring the real board. Nothing is rebuilt or reparented.
 
 ```sh
-npm test            # unit tests (Node 18+, no dependencies)
-npm run validate    # manifest + file-reference checks
-npm run package     # dist/chess-zen-mode-v<version>.zip, .sha256, then validates the zip
-npm run test:e2e    # browser tests; needs Playwright + Chromium + network access
+npm test            # unit tests
+npm run validate    # manifest and file-reference checks
+npm run package     # dist/chess-zen-mode-v<version>.zip + .sha256, then validates the ZIP
+npm run test:e2e    # browser tests: needs Playwright, Chromium and network access
 ```
 
-Load the repo root with **Load unpacked** to develop; reload the extension and the Chess.com tab after changes.
-
-### Testing
-
-`npm run test:e2e` launches Chromium with the extension, opens real Chess.com guest pages (`/play/online`, `/game/daily/<id>`, `/puzzles/rated`, `/puzzles/rush`, `/analysis` with the live Stockfish panel), and checks centering at several window sizes, real drags of Chess.com's resize handle before/during/after Zen Mode, live resize, zoom-equivalent viewports, panel combinations, drawer access, piece/overlay alignment, exact restoration on disable, client-side navigation, scope, tab isolation, popup behavior and persistence across a browser restart. Set `CZM_EXT_DIR` to run it against an unpacked release ZIP. Anything needing a login is listed as manual in the release notes.
-
-### Releasing
-
-1. `npm test && npm run test:e2e`
-2. Bump the version in `manifest.json` **and** `package.json` (`validate` fails if they differ).
-3. `npm run package`; upload `dist/chess-zen-mode-v<version>.zip` (and its `.sha256`) to a GitHub Release by hand.
+Load the repository root with **Load unpacked** to develop; reload the extension and the Chess.com tab after changes. `CZM_EXT_DIR=<folder> npm run test:e2e` runs the browser tests against an unpacked release ZIP. To release: run the tests, bump the version in both `manifest.json` and `package.json`, run `npm run package`, and upload the ZIP by hand. GitHub CI is not used.
 
 ## License
 
-MIT – see [LICENSE](LICENSE).
+[MIT](LICENSE). Version 0.1.0 (see `manifest.json`).
+
+## Disclaimer
+
+Chess Zen Mode is an independent, unofficial extension. It is not affiliated with, endorsed by or sponsored by Chess.com. "Chess.com" is a trademark of its owner; screenshots show Chess.com's own interface only to illustrate what the extension changes.

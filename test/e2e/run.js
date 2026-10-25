@@ -107,7 +107,8 @@ const geom = (p) => p.evaluate((sel) => {
     sideVisible: vis(side), side: r(side),
     peek: !!document.querySelector('#czm-peek'),
     stats: !!document.querySelector('#czm-stats'),
-    bodyBg: getComputedStyle(document.body).backgroundColor,
+    bodyBg: getComputedStyle(document.documentElement).backgroundColor, // Zen paints the canvas via <html>
+    bodyTransparent: getComputedStyle(document.body).backgroundColor === 'rgba(0, 0, 0, 0)',
     mainLeftInline: document.querySelector('#board-layout-main')?.style.left || '',
     scrollbar: innerWidth - document.documentElement.clientWidth,
     clocks: [...document.querySelectorAll('.clock-component')].map((c) => r(c)),
@@ -158,6 +159,15 @@ async function alignment(p) {
   await p.mouse.click(5, 5).catch(() => {});
 }
 const savedSize = (p) => p.evaluate(() => { try { return localStorage.getItem('json_settings'); } catch (e) { return null; } });
+
+const { execFileSync } = require('child_process');
+// Real rendered pixel (not computed style): screenshot the page and read one pixel with PIL.
+async function pixelAt(p, x, y) {
+  const f = path.join(os.tmpdir(), `czm-px-${process.pid}.png`);
+  await p.screenshot({ path: f });
+  const out = execFileSync('python3', ['-I', '-c', 'import sys;from PIL import Image;i=Image.open(sys.argv[1]).convert("RGB");print(*i.getpixel((int(sys.argv[2]),int(sys.argv[3]))))', f, String(Math.round(x)), String(Math.round(y))], { encoding: 'utf8' });
+  return out.trim().split(' ').map(Number);
+}
 
 async function waitSettled(p) { await p.waitForTimeout(500); }
 
@@ -311,6 +321,7 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     await waitSettled(p);
     if (key === 'daily') skip(`[daily] pieces/overlays align to the board grid and are clickable`, 'guest sees only the play shell (no pieces); needs a logged-in Daily game');
     else await check(`[${key}] pieces/overlays align to the board grid and are clickable`, async () => {
+      await p.waitForSelector(`${BOARD} .piece`, { timeout: 15000 }).catch(() => {}); // pieces render asynchronously
       const info = await p.evaluate((sel) => {
         const b = document.querySelector(sel).getBoundingClientRect();
         const sq = b.width / 8;
@@ -643,6 +654,17 @@ async function waitSettled(p) { await p.waitForTimeout(500); }
     await inView(pa, ENGINE.nav, 'nav buttons');
     const depth = await pa.evaluate(() => document.querySelector('.analysis-options-depth')?.textContent || '');
     ok(/depth=\d+/.test(depth), `engine info line missing: "${depth}"`);
+  });
+
+  await check('[analysis] evaluation bar is actually painted in Zen (not hidden behind the Zen background)', async () => {
+    await pa.bringToFront(); await pa.waitForTimeout(1500);
+    const bar = await pa.evaluate(() => { const r = document.querySelector('.evaluation-bar-fill').getBoundingClientRect(); return { x: r.left + r.width / 2, top: r.top, h: r.height }; });
+    const dark = await pixelAt(pa, bar.x, bar.top + 20);          // dark (black-side) part of the bar, near the top
+    const light = await pixelAt(pa, bar.x, bar.top + bar.h - 60); // white-side part, near the bottom
+    ok(dark[0] > 40 && dark[0] < 100, `dark part of bar not painted: rgb(${dark})`);
+    ok(light[0] > 200, `white part of bar not painted: rgb(${light})`);
+    const g = await geom(pa);
+    ok(g.bodyTransparent, 'body must not paint its own background in Zen');
   });
 
   await check('[analysis] native engine toggle works in Zen; Zen never flips it', async () => {

@@ -5,7 +5,7 @@ Run locally (GitHub CI unavailable). Browser tests: Playwright + Chromium (new h
 | Suite | Result |
 | --- | --- |
 | Unit tests (`npm test`) | PASS 35/35 |
-| Browser tests (`npm run test:e2e`) | PASS 159/159 executed, 1 SKIPPED (see below) |
+| Browser tests (`npm run test:e2e`) | PASS 160/160 executed, 1 SKIPPED (see below) |
 | Manifest/ZIP validation (`npm run validate`, `package`) | PASS |
 
 ## Requirement → result
@@ -36,8 +36,11 @@ Run locally (GitHub CI unavailable). Browser tests: Playwright + Chromium (new h
 - First-ever page load before any settings copy exists can briefly show the original layout (the flash fix relies on a copy of the last settings; the cold path is not asserted).
 - Draw/offer/confirm indicator on the edge tab is a class-name heuristic.
 
+## Defect found while capturing README screenshots (fixed)
+In Analysis Zen Mode the evaluation bar was invisible: Zen painted the background on `<body>` as well as `<html>`, and body's background covers Chess.com's negative-`z-index` bar fill. Zen now paints only the root and keeps body transparent. A browser test samples real rendered pixels to prove the bar is painted. (The earlier geometry-only check could not catch this.)
+
 ## Skipped test (not counted as a pass)
-`[daily] pieces/overlays align to the board grid and are clickable` is SKIPPED: guests only receive the play-page shell for Daily games, which has no pieces. The suite reports it as `SKIP` and the totals above count only executed checks (159 executed + 1 skipped = 160).
+`[daily] pieces/overlays align to the board grid and are clickable` is SKIPPED: guests only receive the play-page shell for Daily games, which has no pieces. The suite reports it as `SKIP` and the totals above count only executed checks (160 executed + 1 skipped = 161).
 
 ## Outstanding manual tests (required before release)
 1. **Authenticated Online game:** enable Online Zen; board centered; both clocks tick; premove, drag/click moves, arrows/highlights aligned; resign and draw offer/response reachable via the edge tab; resize board with the native handle; disable Zen mid-game with no interruption.

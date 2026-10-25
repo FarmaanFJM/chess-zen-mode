@@ -8,9 +8,16 @@
  * player bars all keep the site's own geometry.
  */
 
-html.czm-active,
-html.czm-active body {
+/*
+ * Paint the Zen colour on the root (canvas) only and keep <body> transparent. If <body>
+ * had its own background it would be painted above Chess.com's negative-z-index
+ * elements, such as the analysis evaluation bar fill, and hide them.
+ */
+html.czm-active {
   background: var(--czm-bg, #000) !important;
+}
+html.czm-active body {
+  background: transparent !important;
 }
 
 html.czm-active body {
